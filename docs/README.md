@@ -93,6 +93,7 @@ otherwise closed out. Each file carries a `Superseded by` header.
 | `next-work-sequencing-closed-through-2026-09-27.md` | Historical | Closed sequencing snapshot through 2026-09-27. Living order is `design/next-work-sequencing.md` |
 | `next-work-sequencing-closed-v010.md` | Historical | v0.1.0 cut + post-cut leftover deliveries moved off the living sequencing page |
 | `next-work-sequencing-closed-s12-w21.md` | Historical | S12 → W21 cascade product deliveries (ops-backup / D11 / D14 / W21 identity) moved off the living sequencing page |
+| `next-work-sequencing-closed-s11-hostref-mcpstdio.md` | Historical | Item 24 T4 / D13, HOSTREF-S1, and MCPSTDIO-S1 product deliveries moved off the living sequencing page |
 
 ## Superpowers plans and specs (`superpowers/plans/`, `superpowers/specs/`)
 

@@ -1,40 +1,39 @@
 # Next-Work Sequencing
 
-**Date:** 2026-11-01. Gardened after the **S12 → W21** product cascade landed on `main`; this page tracks the remaining ranked backlog off the cut-era framing. No named successor release yet.
+**Date:** 2026-11-15. Gardened against `origin/main` @ `14ee59886` and `origin/_armature` @ `c4ac94992`. No named successor release yet.
 
-**Closed history:** Tier S, the Tier A feature spine, delivered pull-ins, the 2026-09-18 recommended sequence, and the F2 grilling decisions are in [`docs/archive/next-work-sequencing-closed-through-2026-09-27.md`](../archive/next-work-sequencing-closed-through-2026-09-27.md). v0.1.0 cut and post-cut leftover deliveries are in [`docs/archive/next-work-sequencing-closed-v010.md`](../archive/next-work-sequencing-closed-v010.md). S12 ops-backup / D11 / D14 and CLAIMORD-W21 product delivery are in [`docs/archive/next-work-sequencing-closed-s12-w21.md`](../archive/next-work-sequencing-closed-s12-w21.md). Ordinals below match that snapshot. Do not renumber them.
+**Closed history:** Tier S, the Tier A feature spine, delivered pull-ins, the 2026-09-18 recommended sequence, and the F2 grilling decisions are in [`docs/archive/next-work-sequencing-closed-through-2026-09-27.md`](../archive/next-work-sequencing-closed-through-2026-09-27.md). v0.1.0 cut and post-cut leftover deliveries are in [`docs/archive/next-work-sequencing-closed-v010.md`](../archive/next-work-sequencing-closed-v010.md). S12 ops-backup / D11 / D14 and CLAIMORD-W21 product delivery are in [`docs/archive/next-work-sequencing-closed-s12-w21.md`](../archive/next-work-sequencing-closed-s12-w21.md). Item 24's T4 trailer (doctor **D13**), item 28a (`HOSTREF-S1`), and item 28b (`MCPSTDIO-S1`) are in [`docs/archive/next-work-sequencing-closed-s11-hostref-mcpstdio.md`](../archive/next-work-sequencing-closed-s11-hostref-mcpstdio.md). Ordinals below match that snapshot. Do not renumber them.
 
 **Purpose:** One execution order across the planning rounds (`top-tier-gap-analysis.md`, `long-horizon-proposals.md`, `the-next-ten.html`, `narrow-gaps-addendum.md`) plus later filings that earned a row. Armature's DAG orders work inside a tree. It does not rank independent proposals that share no `blocked_by` edge. This file is that ranking. When an item is decomposed, its DAG is authoritative inside the item. This file only orders between items.
 
-Statuses below audited 2026-11-01 against `origin/main` @ `d7b0809b` (#418 SHA-256 gitoid atop #420 residual `trls`) and the S12 cascade merge train. Re-audit before dispatch. Do not fold #419 (gitoid lint follow-ups) into this garden.
+Statuses below audited 2026-11-15 with `arm list`, `arm show`, and `arm ready` on `origin/_armature` @ `c4ac94992`, and with `git log` on `origin/main` @ `14ee59886`. Re-audit before dispatch.
 
 ## What to do next
 
-v0.1.0 is shipped. Post-cut leftovers (CLAIMORD W11–W14 + W20, S7 / S8 / S15 / S16) are **merged**. The Brian-authorized **S12 → W21** product path is **delivered** on `main` (S12-T1 #405, S12-T2 / D11 #408, S18-T4 / D14 #411, W21 identity #282, bug `trls` #420). `arm ready` is not a dispatch order. Do not invent a next release number until a cut task is filed.
+v0.1.0 is shipped. Post-cut leftovers and the S12 → W21 product path are **delivered** (see the archives). Item 24 including doctor **D13** is **on `main`** (PR #444). Item 28a `HOSTREF-S1` is **on `main`** (PRs #445–#453 and #455). Item 28b `MCPSTDIO-S1` is **on `main`** (PR #460, `bec4f3d`). `arm ready` is not a dispatch order. Do not invent a next release number until a cut task is filed.
 
-1. **Next theme: item 28a, `HOSTREF-S1` (host-ref / GitHub Issues join).** This is the concrete ranked successor after leftovers and the S12 → W21 cascade. Ready entry points: `HOSTREF-S1-T1`, `HOSTREF-S1-T3`. Bidirectional GitHub Issues sync remains a non-goal under tripwire **T3**. Parent epic ID `HOSTREF` is absent; the story is a root today.
-2. **Item 28b, `MCPSTDIO-S1`**, stays behind HOSTREF children (`HOSTREF-S1-T5`, `HOSTREF-S1-T6`, `HOSTREF-S1-T9`). [ADR 0024](../adr/0024-arm-mcp-stdio-session-is-not-t1.md) still amends **T1** for harness-spawned `arm mcp` stdio sessions. Do not start MCPSTDIO feature work ahead of those edges.
-3. **Residual S12 → W21 ops are not a new theme.** Optional W21-EDGES and ops `done` → `merged` for `CLAIMORD-W21` are closeout / exclusivity. Do not fold them into HOSTREF PRs. W21 product code is already on `main` (#282); `bug-1783480206` is on `main` (#420).
-4. **Item 24 T4** (`LNGHZN-S11-T4`, doctor **D13**) remains open on the living page; re-audit blockers before claiming. It is not the successor queue for HOSTREF.
-5. **Do not treat Tier C** `TOPTIER-S14` / `TOPTIER-S14-T1` (ready) **as the next theme** just because it appears in `arm ready`. Other undecomposed Tier B/C rows stay ranked below.
+1. **Next theme: item 25, Redesign transition hooks (LH D2).** Lowest open ordinal remaining in Tier B. Items 24, 28a, and 28b moved to the archive in this garden. Ordinals were not renumbered and no row was re-tiered. The story column is still "not yet decomposed" (audit note under the Tier B table).
+2. **Ops closeout for that archived product is not a theme.** `arm show` on `c4ac94992` still has `HOSTREF-S1` `in-progress`, `MCPSTDIO-S1` `open` (`blocked_by` `HOSTREF-S1-T5`, `HOSTREF-S1-T6`, `HOSTREF-S1-T9`), and `LNGHZN-S11-T4` `open`. `arm ready --explain` names those unmet edges. The per-id table is in the 2026-11-15 archive. Do not claim those ids to rebuild PRs already on `main`.
+3. **`arm ready` on this tip is `TOPTIER-S12-T1`, `TOPTIER-S14`, and `TOPTIER-S14-T1`.** S12 product is already on `main` (T1 #405, D11 #408). `arm show CLAIMORD-W21` is `merged`. `arm show W21-EDGES` returns `SHOW-1` (no such issue). `bug-1783480206` is on `main` (#420) and `arm show` is still `open` (`arm ready --explain`: blocker `TOPTIER-S18-T4` not merged).
+4. **Item 28** (Harness Compatibility Contract) stays at ordinal 28, behind 25 and 26. Sub-ordinals 28a and 28b are the archived follow-ons.
+5. **Tier C `TOPTIER-S14` / `TOPTIER-S14-T1` are `arm ready` and are not this theme.** Other open Tier B rows stay ranked above them.
 
 ## Still open
 
 ### Tier B
 
+Story cells that say **not yet decomposed** were checked on `origin/_armature` @ `c4ac94992`: `arm list` returned 818 issues, and the only non-terminal stories were `HOSTREF-S1`, `LNGHZN-S11`, `MCPSTDIO-S1`, `TOPTIER-S12`, and `TOPTIER-S14`. None of those rows has a delivery subject on `origin/main` @ `14ee59886`.
+
 | # | Item | Source | Armature story |
 |---|---|---|---|
-| 24 | One merged-promotion path | LH D4 | `LNGHZN-S11` (ADR 0022). T1–T3 **delivered** (PR #307). **T4** (doctor **D13**) remains; prior S12 / bug product holders are on `main` — re-audit ops blockers before claim |
 | 25 | Redesign transition hooks | LH D2 | not yet decomposed |
 | 26 | Event stream (`arm events --follow`) | LH F3 | not yet decomposed |
 | 28 | The Harness Compatibility Contract | Next-Ten №08 | not yet decomposed |
-| 28a | Host-ref / GitHub Issues join | `docs/design/host-ref.md` | `HOSTREF-S1` (story root; no `HOSTREF` epic). **Next ranked theme.** Name ordered GitHub issue URLs, show current without fetch, print title/body once. Bidirectional Issues sync remains a non-goal under tripwire **T3**. Ready entry points: `HOSTREF-S1-T1`, `HOSTREF-S1-T3` |
-| 28b | Session stdio MCP (`arm mcp`) | session-stdio design (source `7c9ac726-…`) | `MCPSTDIO-S1` (story root; no `MCPSTDIO` epic). `blocked_by` `HOSTREF-S1-T5`, `HOSTREF-S1-T6`, and `HOSTREF-S1-T9`. One invoked stdio session with one tool `arm`; [ADR 0024](../adr/0024-arm-mcp-stdio-session-is-not-t1.md) amends **T1** so a harness-spawned `arm mcp` stdio session that lives only as long as the parent's stdio pipes and exits on EOF is not a long-running process (no listening socket or port, no detaching or daemonizing, no surviving the parent, no background work after EOF) |
 | 29 | Model-tier dispatch policy | LH C8 | not yet decomposed |
 | 32 | The Second Substrate (foreign-repo dogfood) | Next-Ten №06 | not yet decomposed (dogfood themes from the v0.1.0 cut are optional backlog) |
 | 33 | Session handoff bundle | LH C10 | not yet decomposed |
 
-Item 22 (`TOPTIER-S12` / G2) and the S18-T4 D14 trailer live in the S12 → W21 archive. Items 23 (authorship / `TOPTIER-S16`), 30 (README / `TOPTIER-S7`), 31 (shims), 34 (`TOPTIER-S6` **merged**), and 35 (`TOPTIER-S8` **merged**) live in the v0.1.0 archive. The old late-tier G1 row (item 36, `TOPTIER-S11`) and item 27 (`LNGHZN-S10`) remain in the 2026-09-27 archive.
+Item 22 (`TOPTIER-S12` / G2) and the S18-T4 D14 trailer live in the S12 → W21 archive. Item 24 (T1–T3 in the v0.1.0 archive, T4 / D13 in the 2026-11-15 archive) and items 28a / 28b live in the closed-history links above. Items 23 (authorship / `TOPTIER-S16`), 30 (README / `TOPTIER-S7`), 31 (shims), 34 (`TOPTIER-S6` **merged**), and 35 (`TOPTIER-S8` **merged**) live in the v0.1.0 archive. The old late-tier G1 row (item 36, `TOPTIER-S11`) and item 27 (`LNGHZN-S10`) remain in the 2026-09-27 archive.
 
 ### Tier C
 
@@ -44,12 +43,12 @@ Item 22 (`TOPTIER-S12` / G2) and the S18-T4 D14 trailer live in the S12 → W21 
 | 38 | Scope/context suggestion from co-change mining | LH C7 | not yet decomposed |
 | 41 | Living Diagrams | Next-Ten №10 | not yet decomposed |
 | 42 | Time-travel state (`--as-of`) | LH F4 | not yet decomposed |
-| 43 | Flow analytics (`arm stats`) | LH F5 | not yet decomposed |
+| 43 | Flow analytics (`arm stats`) | LH F5 | not yet decomposed. `arm stats --cost` is the delivered item 36 / G1.2 view (PR #161). `cmd/armature/stats.go` states that LH F5 latency and rework analytics are not implemented |
 | 44 | Ops compaction and snapshot checkpoints | LH C2 | not yet decomposed |
 | 45 | Redaction firewall for durable ops | LH C5 | not yet decomposed |
-| 46 | Extensibility seam for custom issue types | Addendum G4 | `TOPTIER-S14` |
+| 46 | Extensibility seam for custom issue types | Addendum G4 | `TOPTIER-S14` story `open`. `TOPTIER-S14-T1` `open` and in `arm ready` (blockers `LNGHZN-S10-T4`, `LNGHZN-S10-T12`, `LNGHZN-S10-T5`, `TOPTIER-S18-T2` are `merged`). `TOPTIER-S14-T2` `open`, `blocked_by` `TOPTIER-S14-T1` (`arm ready --explain`) |
 
-Items 39 (Strategy Memo), 40 (`TOPTIER-S9`), and 47 (`TOPTIER-S15`) are **delivered** and live in the v0.1.0 archive. G4 stays at the tail. The addendum framed it as low urgency until there are external adopters.
+The Tier B audit note covers the **not yet decomposed** cells in this table too. Items 39 (Strategy Memo), 40 (`TOPTIER-S9`), and 47 (`TOPTIER-S15`) are **delivered** and live in the v0.1.0 archive. G4 stays at the tail. The addendum framed it as low urgency until there are external adopters.
 
 ## How to keep this page
 
