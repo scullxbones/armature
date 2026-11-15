@@ -4,3 +4,4 @@
 ["note","HOSTREF-S1-T3",1794764524,"4eab62fe-6231-4545-8bdf-76baffb39fa0",{"msg":"doctor --fix: released expired claim (previously claimed by 15e93628-ef00-4e33-b0e9-d6f1775ffd57)","note_id":"doctor-fix-HOSTREF-S1-T3-1794764524"},1]
 ["transition","HOSTREF-S1-T6",1794764524,"4eab62fe-6231-4545-8bdf-76baffb39fa0",{"to":"open","outcome":"Claim expired without worker transition; re-opening"},1]
 ["note","HOSTREF-S1-T6",1794764524,"4eab62fe-6231-4545-8bdf-76baffb39fa0",{"msg":"doctor --fix: released expired claim (previously claimed by 1eb85bb5-31d4-47b6-ae69-198484fc80a5)","note_id":"doctor-fix-HOSTREF-S1-T6-1794764524"},1]
+["transition","HOSTREF-S1-T7",1794764524,"4eab62fe-6231-4545-8bdf-76baffb39fa0",{"to":"open","outcome":"Claim expired without worker transition; re-opening"},1]
