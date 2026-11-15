@@ -12,32 +12,34 @@ import (
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
-type CheckResult struct {
+type checkResult struct {
 	Pass        bool
 	Remediation string
 }
 
-type GateResult struct {
-	CleanTree        CheckResult
-	ScopeContainment CheckResult
-	CommitReference  CheckResult
+type gateResult struct {
+	CleanTree        checkResult
+	ScopeContainment checkResult
+	CommitReference  checkResult
 }
 
-func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *GateResult {
+// DeliveryGate evaluates clean tree, scope containment, and commit reference.
+// Each check exposes Pass and Remediation.
+func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *gateResult {
 	rng, commitRef := commitReferenceCheck(worktreePath, baseCommit, issueID)
-	return &GateResult{
+	return &gateResult{
 		CleanTree:        cleanTreeCheck(worktreePath),
 		ScopeContainment: scopeContainmentCheck(worktreePath, rng.base, rng.head, scope),
 		CommitReference:  commitRef,
 	}
 }
 
-func cleanTreeCheck(worktreePath string) CheckResult {
+func cleanTreeCheck(worktreePath string) checkResult {
 	git := adapters.New(worktreePath)
 
 	entries, err := git.DirtyEntries()
 	if err != nil {
-		return CheckResult{
+		return checkResult{
 			Pass:        false,
 			Remediation: fmt.Sprintf("Failed to check tree status: %v", err),
 		}
@@ -52,7 +54,7 @@ func cleanTreeCheck(worktreePath string) CheckResult {
 	}
 
 	if len(paths) > 0 {
-		return CheckResult{
+		return checkResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
 				"Working tree is not clean. Commit or discard changes to: %s",
@@ -61,7 +63,7 @@ func cleanTreeCheck(worktreePath string) CheckResult {
 		}
 	}
 
-	return CheckResult{Pass: true, Remediation: ""}
+	return checkResult{Pass: true, Remediation: ""}
 }
 
 func armatureStateNoise(entry adapters.DirtyEntry) bool {
@@ -70,12 +72,12 @@ func armatureStateNoise(entry adapters.DirtyEntry) bool {
 		(entry.OldPath == "" || strings.HasPrefix(entry.OldPath, armatureStateDir))
 }
 
-func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string) CheckResult {
+func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string) checkResult {
 	git := adapters.New(worktreePath)
 
 	entries, err := git.DiffNameStatusRange(baseCommit, head)
 	if err != nil {
-		return CheckResult{
+		return checkResult{
 			Pass:        false,
 			Remediation: fmt.Sprintf("Failed to get diff: %v", err),
 		}
@@ -91,7 +93,7 @@ func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string
 
 	isInScope, outOfScopeFile := scopematch.IsWithinScope(files, scope)
 	if !isInScope {
-		return CheckResult{
+		return checkResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
 				"Delivery diff contains file outside declared scope: %s (scope: %v)",
@@ -100,10 +102,10 @@ func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string
 		}
 	}
 
-	return CheckResult{Pass: true, Remediation: ""}
+	return checkResult{Pass: true, Remediation: ""}
 }
 
-func commitReferenceCheck(worktreePath, baseCommit, issueID string) (deliveryRange, CheckResult) {
+func commitReferenceCheck(worktreePath, baseCommit, issueID string) (deliveryRange, checkResult) {
 	git := adapters.New(worktreePath)
 	return deliveryRef(git, baseCommit, issueID)
 }
@@ -113,7 +115,7 @@ type deliveryRange struct {
 	head string
 }
 
-func deliveryRef(git *adapters.Client, baseCommit, issueID string) (deliveryRange, CheckResult) {
+func deliveryRef(git *adapters.Client, baseCommit, issueID string) (deliveryRange, checkResult) {
 	worktreeRange := deliveryRange{base: baseCommit, head: "HEAD"}
 	worktreeResult := commitReferenceAgainst(git, worktreeRange.base, worktreeRange.head, issueID)
 	if worktreeResult.Pass {
@@ -147,10 +149,10 @@ func logContainsMatchingReference(entries []adapters.LogEntry, issueID string) b
 	return false
 }
 
-func isolatedPrimaryEvidence(git *adapters.Client, baseCommit, primary, issueID string) (deliveryRange, CheckResult, bool) {
+func isolatedPrimaryEvidence(git *adapters.Client, baseCommit, primary, issueID string) (deliveryRange, checkResult, bool) {
 	entries, err := git.LogRange(baseCommit, primary)
 	if err != nil {
-		return deliveryRange{}, CheckResult{}, false
+		return deliveryRange{}, checkResult{}, false
 	}
 	for _, entry := range entries {
 		if !commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
@@ -165,7 +167,7 @@ func isolatedPrimaryEvidence(git *adapters.Client, baseCommit, primary, issueID 
 			return rng, result, true
 		}
 	}
-	return deliveryRange{}, CheckResult{}, false
+	return deliveryRange{}, checkResult{}, false
 }
 
 func completePrimaryLanding(git *adapters.Client, rangeEntries []adapters.LogEntry, matching adapters.LogEntry) deliveryRange {
@@ -206,17 +208,17 @@ func primaryBranchRefs(git *adapters.Client) []string {
 	return refs
 }
 
-func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID string) CheckResult {
+func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID string) checkResult {
 	entries, err := git.LogRange(baseCommit, head)
 	if err != nil {
-		return CheckResult{
+		return checkResult{
 			Pass:        false,
 			Remediation: fmt.Sprintf("Failed to get commits: %v", err),
 		}
 	}
 
 	if !logContainsMatchingReference(entries, issueID) {
-		return CheckResult{
+		return checkResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
 				"No commits found matching conventional-commit format %s(<ISSUE-ID>): ... since %s",
@@ -227,13 +229,13 @@ func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID stri
 
 	empty, err := netDeliveryEmpty(git, baseCommit, head)
 	if err != nil {
-		return CheckResult{
+		return checkResult{
 			Pass:        false,
 			Remediation: fmt.Sprintf("Failed to get diff: %v", err),
 		}
 	}
 	if empty {
-		return CheckResult{
+		return checkResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
 				"A commit matches conventional-commit format but no net changes remain in the diff since %s "+
@@ -243,7 +245,7 @@ func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID stri
 		}
 	}
 
-	return CheckResult{Pass: true, Remediation: ""}
+	return checkResult{Pass: true, Remediation: ""}
 }
 
 func netDeliveryEmpty(git *adapters.Client, baseCommit, head string) (bool, error) {

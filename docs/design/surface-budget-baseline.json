@@ -584,18 +584,11 @@
       ]
     },
     "internal/deliverygate": {
-      "count": 16,
+      "count": 9,
       "names": [
         "BaseCommitFileName",
-        "CheckResult",
-        "CheckResult.Pass",
-        "CheckResult.Remediation",
         "ClaimedBranchFileName",
         "DeliveryGate",
-        "GateResult",
-        "GateResult.CleanTree",
-        "GateResult.CommitReference",
-        "GateResult.ScopeContainment",
         "GatedBaseCommit",
         "ParentBranchConfigKey",
         "RecordedBaseCommit",
