@@ -15,21 +15,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ADR 0026 N1 proof bar (fixture-repo squash-merge suite). Each name must
-// remain present so slices 1–3 stay covered after #483 closeout.
-var n1ProofBarTests = []string{
-	"TestPromotionReadyCLI_FreshPass_REQ_480",
-	"TestPromotionReadyCLI_EmptyContractFails_REQ_480",
-	"TestPromotionReadyCLI_UnknownScopeFails_REQ_480",
-	"TestPromotionReadyCLI_StaleHeadAssessmentFails_REQ_480",
-	"TestPromotionReadyCLI_SharedDiffOneAssessmentSeveralLeaves_REQ_480",
-	"TestLandPR_SquashApplyThenNoOp_REQ_481",
-	"TestJidokaDriftTreeStopOneAndon_REQ_482",
-	"TestLandPR_AlreadyPromotedDryRunNoOps_REQ_483",
-}
-
 func TestN1ProofBarInventory_REQ_483(t *testing.T) {
 	t.Parallel()
+	// ADR 0026 N1 proof bar (fixture-repo squash-merge suite). Each name must
+	// remain present so slices 1–3 stay covered after #483 closeout.
+	wantTests := []string{
+		"TestPromotionReadyCLI_FreshPass_REQ_480",
+		"TestPromotionReadyCLI_EmptyContractFails_REQ_480",
+		"TestPromotionReadyCLI_UnknownScopeFails_REQ_480",
+		"TestPromotionReadyCLI_StaleHeadAssessmentFails_REQ_480",
+		"TestPromotionReadyCLI_SharedDiffOneAssessmentSeveralLeaves_REQ_480",
+		"TestLandPR_SquashApplyThenNoOp_REQ_481",
+		"TestJidokaDriftTreeStopOneAndon_REQ_482",
+		"TestLandPR_AlreadyPromotedDryRunNoOps_REQ_483",
+	}
 	dir, err := os.Getwd()
 	require.NoError(t, err)
 	entries, err := os.ReadDir(dir)
@@ -52,7 +51,7 @@ func TestN1ProofBarInventory_REQ_483(t *testing.T) {
 			found[fn.Name.Name] = true
 		}
 	}
-	for _, want := range n1ProofBarTests {
+	for _, want := range wantTests {
 		assert.True(t, found[want], "N1 proof-bar fixture missing: %s", want)
 	}
 }
