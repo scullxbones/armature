@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 167,
+      "count": 168,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -46,6 +46,7 @@
         "Client.DirtyEntriesIncludingSubmodules",
         "Client.FetchAndRebase",
         "Client.FetchBranchToRef",
+        "Client.FetchPullHead",
         "Client.FetchTrackingRefWithoutMovingHEAD",
         "Client.FirstParent",
         "Client.FirstParentAfter",

@@ -1431,6 +1431,33 @@ Verify cached content matches stored fingerprints.
 
 ---
 
+## land
+
+Apply the stored promotion result for GitHub PR `N` after merge (ADR 0026 N1).
+
+**Synopsis:**
+`arm land --pr <N> [--dry-run]`
+
+**Description:**
+Fetches `refs/pull/N/head` so the delivery tip remains reachable after a squash
+(R1). Selects done leaves whose tip is that pull head (or an ancestor of it),
+runs the same ADR 0022 matcher as `arm sync` / `arm merged`, and appends
+`merged` with the matched squash SHA when done + attestation are already
+stored. `--dry-run` writes nothing (early warning before merge). Idempotent:
+a second apply is a no-op. The post-merge GitHub Action and scheduled sweep
+call this verb; they publish `_armature` only via `arm push-ops`.
+
+**Flags:**
+- `--pr string`: PR number (required). Digits, `#N`, or a GitHub pull URL.
+- `--dry-run`: Classify without writing ops, promotion-check records, delivery-ref deletes, or worktree removals.
+
+**Output:** the same ADR 0017 sync envelope (`count`, `issues[]`, `help[]`).
+
+**Exit:**
+- 0 when no scoped leaf is `missing-assessment` or `check-failed`.
+- 1 when a delivery is on the target and the assessment is missing, or a recorded delivery cannot be checked.
+- `LAND-1` Command Failure when PR parse, pull-head fetch, or snapshot/ops load/persist fails.
+
 ## sync
 
 Classify every done leaf with the same promotion check as `arm merged`. A pass appends `merged` (and deletes the delivery ref / bound worktree). `--dry-run` writes nothing. The post-merge hook calls the same function, prints the same envelope, and exits 0.

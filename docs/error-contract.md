@@ -64,6 +64,7 @@ stay on the platform/git protocol.
 | `GATE-1` | gate | `arm gate run` could not complete when the failure is not already a gate protocol payload. | LNGHZN-S6-T5 | |
 | `HEARTBEAT-1` | heartbeat | `arm heartbeat` could not complete. | LNGHZN-S6-T5 | |
 | `IMPORT-1` | import | `arm import` could not complete. | LNGHZN-S6-T5 | |
+| `LAND-1` | land | `arm land --pr` could not complete (invalid PR, fetch of `refs/pull/N/head` failed, snapshot/ops load or persist failed). A completed classification is an ADR 0017 envelope even when exit is 1 (`missing-assessment` or `check-failed`). | 481 | |
 | `LINK-1` | link | `arm link` could not complete. | LNGHZN-S6-T5 | |
 | `LIST-1` | list | `arm list` could not complete (ops/state load). | LNGHZN-S6-T5 | |
 | `LOG-1` | log | `arm log` could not complete. | LNGHZN-S6-T5 | |
