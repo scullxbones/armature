@@ -25,6 +25,7 @@ func classifiedValidity() map[string]bool {
 		OpLogQuarantine:      false,
 		OpAssessmentAttested: false,
 		OpPromotionCheck:     false,
+		OpPromotionStop:      false,
 	}
 }
 
