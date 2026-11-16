@@ -58,7 +58,7 @@ func TestValidateRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
 	commitFile(t, repo, "a.txt", "one\n", "init")
 	git := adapters.New(repo)
 
-	_, err := Validate(git, Request{
+	_, err := validate(git, Request{
 		IssueID:   "rec-missing",
 		IssueType: "task",
 		Base:      gitoid.PadSHA1("deadbeef"),
@@ -66,9 +66,9 @@ func TestValidateRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.True(t, IsRecordError(err))
-	var rec *RecordError
+	var rec *validationError
 	require.ErrorAs(t, err, &rec)
-	assert.Equal(t, "missing-objects", rec.Kind)
+	assert.Equal(t, "missing-objects", rec.kind)
 }
 
 func TestValidateRejectsEmptyRange(t *testing.T) {
@@ -78,7 +78,7 @@ func TestValidateRejectsEmptyRange(t *testing.T) {
 	gittest.Git(t, repo, "branch", "task/rec-empty")
 	git := adapters.New(repo)
 
-	_, err := Validate(git, Request{
+	_, err := validate(git, Request{
 		IssueID:   "rec-empty",
 		IssueType: "task",
 		Base:      sha,
@@ -86,9 +86,9 @@ func TestValidateRejectsEmptyRange(t *testing.T) {
 		Branch:    "task/rec-empty",
 	})
 	require.Error(t, err)
-	var rec *RecordError
+	var rec *validationError
 	require.ErrorAs(t, err, &rec)
-	assert.Equal(t, "empty-range", rec.Kind)
+	assert.Equal(t, "empty-range", rec.kind)
 }
 
 func TestValidateRejectsUnrelatedTip(t *testing.T) {
@@ -102,7 +102,7 @@ func TestValidateRejectsUnrelatedTip(t *testing.T) {
 	other := commitFile(t, repo, "c.txt", "other\n", "unrelated")
 
 	git := adapters.New(repo)
-	_, err := Validate(git, Request{
+	_, err := validate(git, Request{
 		IssueID:   "rec-unrel",
 		IssueType: "task",
 		Base:      base,
@@ -110,9 +110,9 @@ func TestValidateRejectsUnrelatedTip(t *testing.T) {
 		Branch:    "task/rec-unrel",
 	})
 	require.Error(t, err, "claimed tip is %s", claimed)
-	var rec *RecordError
+	var rec *validationError
 	require.ErrorAs(t, err, &rec)
-	assert.Equal(t, "unrelated-range", rec.Kind)
+	assert.Equal(t, "unrelated-range", rec.kind)
 }
 
 func TestRecordArgvFillsIssueKeepsShaPlaceholder(t *testing.T) {
@@ -135,21 +135,21 @@ func TestValidateRejectsUnknownIssueWithoutProvenance_REQ_LNGHZN_S11_T1(t *testi
 	tip := commitFile(t, repo, "b.txt", "two\n", "feat: add b")
 
 	git := adapters.New(repo)
-	_, err := Validate(git, Request{
+	_, err := validate(git, Request{
 		IssueID:   "does-not-exist",
 		IssueType: "",
 		Base:      base,
 		Tip:       tip,
 	})
 	require.Error(t, err, "unknown issue with empty type must not get a provenance exemption")
-	var rec *RecordError
+	var rec *validationError
 	require.ErrorAs(t, err, &rec)
-	assert.Equal(t, "no-provenance", rec.Kind)
+	assert.Equal(t, "no-provenance", rec.kind)
 
 	_, resolveErr := git.ResolveRevision(RefName("does-not-exist"))
-	require.Error(t, resolveErr, "Validate must not write a delivery ref")
+	require.Error(t, resolveErr, "validate must not write a delivery ref")
 
-	_, bareEpicErr := Validate(git, Request{
+	_, bareEpicErr := validate(git, Request{
 		IssueID:   "epic-bare",
 		IssueType: "epic",
 		Base:      base,
@@ -169,7 +169,7 @@ func TestValidateRejectsUnreadableBoundWorktreeHEAD_REQ_LNGHZN_S11_T1(t *testing
 	require.NoError(t, os.WriteFile(filepath.Join(repo, ".git", "HEAD"), []byte("ref: refs/heads/missing-branch\n"), 0o644))
 
 	git := adapters.New(repo)
-	_, err := Validate(git, Request{
+	_, err := validate(git, Request{
 		IssueID:      "rec-head",
 		IssueType:    "task",
 		Base:         base,
@@ -178,7 +178,7 @@ func TestValidateRejectsUnreadableBoundWorktreeHEAD_REQ_LNGHZN_S11_T1(t *testing
 		WorktreePath: repo,
 	})
 	require.Error(t, err, "bound worktree with unreadable HEAD must fail closed")
-	var rec *RecordError
+	var rec *validationError
 	require.ErrorAs(t, err, &rec)
-	assert.Equal(t, "head-unreadable", rec.Kind)
+	assert.Equal(t, "head-unreadable", rec.kind)
 }
