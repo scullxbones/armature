@@ -30,3 +30,4 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0023](0023-depguard-allow-list-widens-are-adr-class.md) | Widening a Depguard Fence Is ADR-Class | Accepted (amends ADR-0004) |
 | [0024](0024-arm-mcp-stdio-session-is-not-t1.md) | An `arm mcp` Stdio Session Is Not a T1 Long-Running Process | Accepted (amends ADR-0009) |
 | [0025](0025-gitoid-shared-object-id-helper.md) | Shared `gitoid` Helper for SHA-1 and SHA-256 Object IDs | Accepted (amends ADR-0023 / ADR-0004 fences) |
+| [0026](0026-armature-1-0-scope-keep-kill-defer.md) | Armature 1.0 Scope — Keep, Kill, and Defer | Accepted |
