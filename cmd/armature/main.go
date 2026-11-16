@@ -236,6 +236,10 @@ func newRootCmd() *cobra.Command {
 	mergedCmd.GroupID = "sync"
 	root.AddCommand(mergedCmd)
 
+	landCmd := newLandCmd()
+	landCmd.GroupID = "sync"
+	root.AddCommand(landCmd)
+
 	materializeCmd := newMaterializeCmd()
 	materializeCmd.GroupID = "sync"
 	root.AddCommand(materializeCmd)
@@ -443,6 +447,7 @@ func pavedRoadCommands() map[string]pavedRoadClass {
 		"ops-backup verify":       {Kind: pavedRoadKindEscape, Note: "Confirm a bundle advertises a restorable tip."},
 		"ops-backup restore-plan": {Kind: pavedRoadKindEscape, Note: "Print I2 disposition only; diverge is aside+_armature-recovered."},
 		"merged":                  {Kind: pavedRoadKindEscape, Note: "Promote one done leaf when delivery is on the target. Prefer sync after the PR lands."},
+		"land":                    {Kind: pavedRoadKindPaved, Note: "Host post-merge apply for PR N (ADR 0026 R1 + ADR 0022 matcher)."},
 		"materialize":             {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
 		"import":                  {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},
 
@@ -527,7 +532,7 @@ func pavedRoadPipeline() []pavedRoadStep {
 			ID:          "sync",
 			Title:       "Sync",
 			Description: "Publish ops, then let merged PRs promote issues.",
-			Commands:    []string{"push-ops", "sync"},
+			Commands:    []string{"push-ops", "sync", "land"},
 		},
 	}
 }

@@ -2484,6 +2484,78 @@ func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
 	require.Error(t, c.FetchBranchToRef("_armature", ""))
 }
 
+func TestFetchPullHead_R1_REQ_481(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, fx.Dir, "checkout", "-b", "delivery")
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "feat: tip")
+	tip := runGitOutput(t, fx.Dir, "rev-parse", "HEAD")
+	gittest.Git(t, fx.Dir, "push", "origin", "HEAD:refs/pull/42/head")
+	gittest.Git(t, fx.Dir, "checkout", "main")
+
+	fresh := t.TempDir()
+	gittest.Git(t, "", "clone", fx.Origin, fresh)
+	c := adapters.New(fresh)
+	got, err := c.FetchPullHead("42")
+	require.NoError(t, err)
+	assert.Equal(t, tip, got)
+
+	_, err = c.FetchPullHead("")
+	require.Error(t, err)
+	_, err = c.FetchPullHead("not-a-number")
+	require.Error(t, err)
+}
+
+func TestFetchPullHead_ErrorRedactsToken_REQ_481(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
+	secret := "ghs_" + "TEST_TOKEN_DO_NOT_LEAK_481aabb"
+	gittest.Git(t, fx.Dir, "remote", "set-url", "origin",
+		"https://x-access-token:"+secret+"@127.0.0.1:1/armature-token-leak.git")
+	c := adapters.New(fx.Dir).WithNetworkTimeout(2 * time.Second)
+	_, err := c.FetchPullHead("99")
+	require.Error(t, err)
+	msg := err.Error()
+	assert.NotContains(t, msg, secret, "fetch error must not leak token")
+	assert.NotContains(t, msg, "x-access-token:"+secret)
+	assert.NotContains(t, strings.ToLower(msg), strings.ToLower(secret))
+}
+
+func TestNetworkCmd_GitHubTokenNotPersisted_REQ_481(t *testing.T) {
+	// GIT_CONFIG_* auth must not land in git config / remote URL / argv.
+	probe := "ghs_" + "PERSIST_PROBE_481_TOKEN"
+	t.Setenv("GITHUB_TOKEN", probe)
+	fx := gittest.InitWithOrigin(t)
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
+	cleanURL := "https://github.com/scullxbones/armature-token-probe.git"
+	gittest.Git(t, fx.Dir, "remote", "set-url", "origin", cleanURL)
+	// Offline: rewrite https origin to the local bare path for the fetch itself.
+	gittest.Git(t, fx.Dir, "config", "--local", "url."+fx.Origin+"/.insteadOf", cleanURL)
+
+	beforeURL := runGitOutput(t, fx.Dir, "config", "--get", "remote.origin.url")
+	require.Equal(t, cleanURL, beforeURL)
+
+	c := adapters.New(fx.Dir).WithNetworkTimeout(5 * time.Second)
+	// Missing pull ref → network error path; auth must still be ephemeral.
+	_, fetchErr := c.FetchPullHead("404")
+	require.Error(t, fetchErr)
+
+	afterURL := runGitOutput(t, fx.Dir, "config", "--get", "remote.origin.url")
+	assert.Equal(t, beforeURL, afterURL, "remote.origin.url must stay token-free")
+	assert.NotContains(t, afterURL, probe)
+	assert.NotContains(t, afterURL, "x-access-token")
+
+	// Local http.*.extraHeader must stay empty after the authenticated fetch.
+	extra, err := adapters.NonInteractiveGitCommand(fx.Dir, "config", "--local", "--get-regexp", `^http\..*\.extraheader$`).CombinedOutput()
+	if err == nil {
+		t.Fatalf("http.*.extraHeader must be unset locally after fetch, got %q", strings.TrimSpace(string(extra)))
+	}
+	assert.NotContains(t, string(extra), probe)
+	assert.NotContains(t, string(extra), "AUTHORIZATION")
+}
+
 func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)

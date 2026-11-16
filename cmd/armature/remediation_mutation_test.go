@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -143,7 +145,9 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 }
 
 // setupForeignExpiredMergedFixture builds G2(merged)→P2(done)→OS foreign claimed
-// with --ttl 1, then waits past expiry so doctor --fix can release it.
+// with --ttl 1 already past expiry. Expiry is deterministic: append a claim op
+// with a stale timestamp into a *new* foreign ops log (uncommitted suffix is
+// visible to materialize). No time.Sleep; safe under t.Parallel.
 func setupForeignExpiredMergedFixture(t *testing.T) (repo, workerID string) {
 	t.Helper()
 	repo = gittest.InitWithOrigin(t).Dir
@@ -155,6 +159,13 @@ func setupForeignExpiredMergedFixture(t *testing.T) (repo, workerID string) {
 	workerID, logPath, err = resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
 
+	// Timestamps must stay ordered (create < claim < merge) while claim is
+	// still older than now by > TTL minutes so LeaseLive is false.
+	now := nowEpoch()
+	createAt := now - 200
+	claimAt := now - 120 // ttl=1m → expired; after creates so replay finds OS
+	mergeAt := now - 60
+
 	for _, c := range []struct {
 		id, title, typ, parent string
 	}{
@@ -163,7 +174,7 @@ func setupForeignExpiredMergedFixture(t *testing.T) (repo, workerID string) {
 		{"OS", "Foreign OS", "task", "P2"},
 	} {
 		require.NoError(t, appendOp(ctx, logPath, ops.Op{
-			Type: ops.OpCreate, TargetID: c.id, Timestamp: nowEpoch(), WorkerID: workerID,
+			Type: ops.OpCreate, TargetID: c.id, Timestamp: createAt, WorkerID: workerID,
 			Payload: ops.Payload{
 				Title: c.title, NodeType: c.typ, Parent: c.parent,
 				DefinitionOfDone: c.title + " is complete and tested",
@@ -174,24 +185,36 @@ func setupForeignExpiredMergedFixture(t *testing.T) (repo, workerID string) {
 		}))
 	}
 	require.NoError(t, appendOp(ctx, logPath, ops.Op{
-		Type: ops.OpTransition, TargetID: "P2", Timestamp: nowEpoch(), WorkerID: workerID,
+		Type: ops.OpTransition, TargetID: "P2", Timestamp: createAt + 1, WorkerID: workerID,
 		Payload: ops.Payload{To: ops.StatusDone, Outcome: "fixture done parent under merged for expired foreign"},
 	}))
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	other := "other-worker-foreign"
-	_, err = runTrls(t, repo, "claim", "--issue", "OS", "--worktree", "--ttl", "1", "--worker-id", other)
-	require.NoError(t, err)
+	wtPath := filepath.Join(repo, ".worktrees", "OS")
+	require.NoError(t, os.MkdirAll(wtPath, 0o755))
+	opsWT := filepath.Join(repo, ".armature")
+	foreignLog := opsLogPath(opsWT, other)
+	require.NoError(t, ops.AppendOp(foreignLog, ops.Op{
+		Type: ops.OpClaim, TargetID: "OS", Timestamp: claimAt, WorkerID: other,
+		Payload: ops.Payload{
+			TTL:          1,
+			ClaimToken:   "tok-expired-fixture",
+			WorktreePath: wtPath,
+		},
+	}))
+	// Commit so doctor --fix / transition see the same lease materialize does
+	// (uncommitted suffix alone is enough for graph load, but fix path commits).
+	rel := filepath.Join("ops", other+".log")
+	run(t, opsWT, "git", "add", "--", rel)
+	run(t, opsWT, "git", "-c", "core.hooksPath=/dev/null", "commit", "-m", "test: seed expired foreign claim")
 
 	require.NoError(t, appendOp(ctx, logPath, ops.Op{
-		Type: ops.OpTransition, TargetID: "G2", Timestamp: nowEpoch(), WorkerID: workerID,
+		Type: ops.OpTransition, TargetID: "G2", Timestamp: mergeAt, WorkerID: workerID,
 		Payload: ops.Payload{To: ops.StatusMerged},
 	}))
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-
-	// TTL minutes=1 → 60s window; wait past expiry for doctor --fix / Option B.
-	time.Sleep(65 * time.Second)
 	return repo, workerID
 }

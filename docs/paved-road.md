@@ -68,6 +68,7 @@ Publish ops, then let merged PRs promote issues.
 
 - `arm push-ops`
 - `arm sync`
+- `arm land`
 
 ## Command classification
 
@@ -87,6 +88,7 @@ Zero unclassified leaf commands is a gate.
 - `arm gate`
 - `arm gate run` — Work
 - `arm help`
+- `arm land` — Sync
 - `arm link` — Plan / decompose
 - `arm list` — Wave dispatch
 - `arm note` — Work

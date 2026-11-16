@@ -3399,7 +3399,7 @@ func TestCommandGroups(t *testing.T) {
 
 	workflowExpected := []string{"ready", "claim", "transition", "unassign", "reopen", "heartbeat", "note", "decision", "amend", "confirm", "assign"}
 	dagExpected := []string{"dag", "link", "unlink"}
-	syncExpected := []string{"sync", "merged", "materialize", "import", "push-ops"}
+	syncExpected := []string{"sync", "merged", "land", "materialize", "import", "push-ops"}
 	adminExpected := []string{
 		"worker-init", "workers", "bootstrap", "create", "validate", "doctor", "version",
 		"show", "list", "log", "stats", "render-context", "sources", "context-history",

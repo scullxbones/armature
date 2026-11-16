@@ -55,6 +55,7 @@ type classifiedLeaf struct {
 	Result       promotion.Result
 	Integration  string
 	ExplicitInto bool
+	PR           string
 }
 
 func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool) error {
@@ -208,7 +209,7 @@ func persistClassifications(ctx *config.Context, git *adapters.Client, items []c
 			continue
 		}
 		wrote, appendErr := appendMergedIfCurrent(
-			ctx, git, logPath, workerID, item.Issue, item.Integration, item.ExplicitInto, "",
+			ctx, git, logPath, workerID, item.Issue, item.Integration, item.ExplicitInto, item.PR,
 		)
 		if appendErr != nil {
 			return appendErr
@@ -277,6 +278,7 @@ func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *clas
 		Issue:       promotionIssueFacts(*live),
 		PriorOps:    allOps,
 		Integration: integ,
+		PR:          item.PR,
 		Graph:       graph,
 		Opts:        planOpts,
 	})

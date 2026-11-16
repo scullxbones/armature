@@ -28,6 +28,7 @@ MANDATORY_FLAGS = {
     "unlink": ["--source", "--dep"],
     "decision": ["--topic", "--choice"],
     "merged": ["--issue"],
+    "land": ["--pr"],
     "create": ["--title"],
     "context-history": ["--issue"],
     "reparent": ["--issue", "--parent"],
