@@ -443,3 +443,107 @@ func TestExactRefFromPatternOutput_REQ_TOPTIER_S12_T1G(t *testing.T) {
 		t.Fatalf("refsUnderPrefix got %v", refs)
 	}
 }
+
+func TestEphemeralGitHubAuth_ScopedEnvNotArgs_REQ_481(t *testing.T) {
+	t.Parallel()
+	probe := "ghs_" + "ARGS_PROBE_481_TOKEN"
+
+	t.Run("github_https_uses_GIT_CONFIG_env", func(t *testing.T) {
+		t.Parallel()
+		repo := seedRepoOriginURL(t, "https://github.com/scullxbones/armature-auth-probe.git")
+		c := New(repo).WithEnviron(append(os.Environ(), "GITHUB_TOKEN="+probe))
+		cmd, _, cancel := c.networkCmd("ls-remote", "--refs", "origin", "HEAD")
+		defer cancel()
+		for _, a := range cmd.Args {
+			if strings.Contains(a, probe) || strings.Contains(strings.ToLower(a), "authorization") {
+				t.Fatalf("token/header must not appear in cmd.Args: %q", a)
+			}
+			if strings.HasPrefix(a, "http.extraHeader=") || strings.Contains(a, "AUTHORIZATION: bearer") {
+				t.Fatalf("must not inject auth via -c argv: %v", cmd.Args)
+			}
+		}
+		env := strings.Join(cmd.Env, "\n")
+		if !strings.Contains(env, "GIT_CONFIG_COUNT=1") {
+			t.Fatal("expected GIT_CONFIG_COUNT=1 on github.com origin")
+		}
+		if !strings.Contains(env, "GIT_CONFIG_KEY_0=http.https://github.com/.extraHeader") {
+			t.Fatal("expected host-scoped http.https://github.com/.extraHeader key")
+		}
+		wantVal := "GIT_CONFIG_VALUE_0=AUTHORIZATION: bearer " + probe
+		if !strings.Contains(env, wantVal) {
+			t.Fatal("expected bearer token in GIT_CONFIG_VALUE_0 only")
+		}
+	})
+
+	t.Run("non_github_https_no_header", func(t *testing.T) {
+		t.Parallel()
+		repo := seedRepoOriginURL(t, "https://example.com/scullxbones/armature-auth-probe.git")
+		c := New(repo).WithEnviron(append(os.Environ(), "GITHUB_TOKEN="+probe))
+		cmd, _, cancel := c.networkCmd("ls-remote", "--refs", "origin", "HEAD")
+		defer cancel()
+		for _, a := range cmd.Args {
+			if strings.Contains(a, probe) {
+				t.Fatalf("token must not appear in cmd.Args: %q", a)
+			}
+		}
+		for _, e := range cmd.Env {
+			if strings.HasPrefix(e, "GIT_CONFIG_COUNT=") ||
+				strings.HasPrefix(e, "GIT_CONFIG_KEY_0=") ||
+				strings.HasPrefix(e, "GIT_CONFIG_VALUE_0=") {
+				t.Fatalf("non-GitHub HTTPS origin must not set GIT_CONFIG_*: %q", e)
+			}
+		}
+	})
+}
+
+func TestHTTPSGitHubHost_REQ_481(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		raw  string
+		host string
+		ok   bool
+	}{
+		{raw: "https://github.com/org/repo.git", host: "github.com", ok: true},
+		{raw: "https://GitHub.com/org/repo", host: "github.com", ok: true},
+		{raw: "https://example.com/org/repo.git", ok: false},
+		{raw: "git@github.com:org/repo.git", ok: false},
+		{raw: "http://github.com/org/repo.git", ok: false},
+		{raw: "https://gist.github.com/x", ok: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			t.Parallel()
+			host, ok := httpsGitHubHost(tc.raw)
+			if ok != tc.ok || host != tc.host {
+				t.Fatalf("httpsGitHubHost(%q) = (%q, %v), want (%q, %v)", tc.raw, host, ok, tc.host, tc.ok)
+			}
+		})
+	}
+}
+
+// seedRepoOriginURL writes a minimal .git so firstRemoteURL can read origin
+// without calling GitInit* (adapters cannot import gittest; hermetic forbids
+// GitInit in package adapters tests).
+func seedRepoOriginURL(t *testing.T, originURL string) string {
+	t.Helper()
+	repo := t.TempDir()
+	gitDir := filepath.Join(repo, ".git")
+	for _, d := range []string{
+		filepath.Join(gitDir, "objects"),
+		filepath.Join(gitDir, "refs", "heads"),
+	} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n" +
+		"[remote \"origin\"]\n\turl = " + originURL + "\n" +
+		"\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}

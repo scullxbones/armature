@@ -59,9 +59,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Do not embed the token in remote.origin.url / git config.
-          git -c "http.extraHeader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" \
-            fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
+          # Host-scoped GitHub auth via GIT_CONFIG_* (Git ≥2.31). Never -c with
+          # the token (visible in ps/argv) and never write remote URL / .git/config.
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0='http.https://github.com/.extraHeader'
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"
+          git fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
 
       - name: Attach ops worktree and register CI worker
         run: |

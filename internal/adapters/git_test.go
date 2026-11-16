@@ -2524,7 +2524,7 @@ func TestFetchPullHead_ErrorRedactsToken_REQ_481(t *testing.T) {
 }
 
 func TestNetworkCmd_GitHubTokenNotPersisted_REQ_481(t *testing.T) {
-	// Env-scoped auth must not land in git config / remote URL.
+	// GIT_CONFIG_* auth must not land in git config / remote URL / argv.
 	probe := "ghs_" + "PERSIST_PROBE_481_TOKEN"
 	t.Setenv("GITHUB_TOKEN", probe)
 	fx := gittest.InitWithOrigin(t)
@@ -2547,11 +2547,13 @@ func TestNetworkCmd_GitHubTokenNotPersisted_REQ_481(t *testing.T) {
 	assert.NotContains(t, afterURL, probe)
 	assert.NotContains(t, afterURL, "x-access-token")
 
+	// Local http.*.extraHeader must stay empty after the authenticated fetch.
 	extra, err := adapters.NonInteractiveGitCommand(fx.Dir, "config", "--local", "--get-regexp", `^http\..*\.extraheader$`).CombinedOutput()
 	if err == nil {
-		assert.NotContains(t, string(extra), probe, "http.extraHeader must not persist in local config")
-		assert.NotContains(t, string(extra), "AUTHORIZATION")
+		t.Fatalf("http.*.extraHeader must be unset locally after fetch, got %q", strings.TrimSpace(string(extra)))
 	}
+	assert.NotContains(t, string(extra), probe)
+	assert.NotContains(t, string(extra), "AUTHORIZATION")
 }
 
 func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {

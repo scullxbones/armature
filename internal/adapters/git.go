@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -933,31 +934,85 @@ func (c *Client) withPublishDeadline() *Client {
 // process-group cancel, and WaitDelay. Pass the remote by name so
 // remote.<name>.* applies inside the clone; do not -c remote.<name>.url=
 // (git appends a value and does not override). When GITHUB_TOKEN is set and
-// origin is https, auth is injected per-command via -c http.extraHeader
-// (never persisted to git config / remote URL). Caller must defer cancel().
+// origin is https://github.com/…, auth is injected for that command only via
+// GIT_CONFIG_COUNT / KEY / VALUE (Git ≥2.31; never -c, never .git/config).
+// Caller must defer cancel().
 func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.effectiveNetworkTimeout())
-	cmd := c.cmdContext(ctx, c.withEphemeralHTTPAuth(args)...)
+	cmd := c.cmdContext(ctx, args...)
+	c.applyEphemeralGitHubHTTPAuth(cmd)
 	configureNetworkCmd(cmd)
 	return cmd, ctx, cancel
 }
 
-// withEphemeralHTTPAuth prepends a per-process -c http.extraHeader when
-// GITHUB_TOKEN is present and origin uses https. The header is not written to
-// git config; remote URLs stay token-free.
-func (c *Client) withEphemeralHTTPAuth(args []string) []string {
+// applyEphemeralGitHubHTTPAuth sets GIT_CONFIG_* on cmd so git sees a
+// host-scoped http.extraHeader for github.com only. Non-GitHub HTTPS origins
+// get no header. The token never appears in cmd.Args and is not written to
+// .git/config.
+func (c *Client) applyEphemeralGitHubHTTPAuth(cmd *exec.Cmd) {
+	if cmd == nil {
+		return
+	}
 	token := c.githubToken()
 	if token == "" {
-		return args
+		return
 	}
 	remoteURL, err := c.firstRemoteURL("origin")
-	if err != nil || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(remoteURL)), "https://") {
-		return args
+	if err != nil {
+		return
 	}
-	header := "http.extraHeader=AUTHORIZATION: bearer " + token
-	out := make([]string, 0, len(args)+2)
-	out = append(out, "-c", header)
-	return append(out, args...)
+	host, ok := httpsGitHubHost(remoteURL)
+	if !ok {
+		return
+	}
+	key := "http.https://" + host + "/.extraHeader"
+	val := "AUTHORIZATION: bearer " + token
+	env := cmd.Env
+	if len(env) == 0 {
+		env = os.Environ()
+	} else {
+		env = append([]string(nil), env...)
+	}
+	env = stripEnvKeys(env, "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0")
+	env = append(env,
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0="+key,
+		"GIT_CONFIG_VALUE_0="+val,
+	)
+	cmd.Env = env
+}
+
+func httpsGitHubHost(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u == nil {
+		return "", false
+	}
+	if !strings.EqualFold(u.Scheme, "https") {
+		return "", false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host != "github.com" {
+		return "", false
+	}
+	return "github.com", true
+}
+
+func stripEnvKeys(environ []string, keys ...string) []string {
+	drop := make(map[string]struct{}, len(keys))
+	for _, k := range keys {
+		drop[k] = struct{}{}
+	}
+	out := make([]string, 0, len(environ))
+	for _, e := range environ {
+		name, _, ok := strings.Cut(e, "=")
+		if ok {
+			if _, skip := drop[name]; skip {
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 func (c *Client) githubToken() string {

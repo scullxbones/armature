@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Host entry for ADR 0026 N1 (#481): run `arm land --pr` for one merged PR,
 # or sweep recent merged PRs. No model, no extra secrets — GITHUB_TOKEN only
-# (consumed by arm networkCmd as an ephemeral http.extraHeader; never written
-# into remote URLs / git config by this script).
+# (consumed by arm networkCmd as host-scoped GIT_CONFIG_* auth for github.com;
+# never written into remote URLs / git config by this script).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
