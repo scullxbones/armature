@@ -203,7 +203,8 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `hook` | main.go:255, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
 | `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |
 | `gate` | main.go, gate.go | Run configured quality-gate profiles | **kept-evidence** | Container for `gate run`. Profiles come from `.armature/config.json` `gates` map; `full` is reserved as the publish profile. |
-| `gate run` | gate.go | Execute a named gate profile and append evidence | **kept-evidence** | Subcommand of `gate`. Runs in the invoking checkout. Streams output to `.armature/gates/` and appends a `gate-evidence` op to the invoking worker log. Trees dirty before or after the command record `uncommitted` (not citable). |
+| `gate run` | gate.go | Execute a named gate profile and append evidence | **kept-evidence** | Subcommand of `gate`. Runs in the invoking checkout. Streams output to `.armature/gates/` and appends a `gate-evidence` op to the invoking worker log. Trees dirty before or after the command record `uncommitted` (not citable). CI sets `ci=true` under `GITHUB_ACTIONS`. |
+| `promotion-ready` | main.go, promotion_ready.go | Verify-only pre-merge poka-yoke (ADR 0026 N1) | **kept-evidence** | Flags: `--issue` (repeatable), `--base`, `--head`. Refuses empty contract / unknown scope (R4), missing CI full gate evidence at head (R2), and assessments not keyed by delivery `(base, tip)` for that head (R3). Never authors assessments. |
 | `tui` | main.go:259, tui.go | TUI for issue navigation | **kept-evidence** | Interactive mode. Lists and filters issues. |
 | `context-history` | main.go:263, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
 | `context-report` | main.go, context_report.go | Price fixture-measured main-path CLI payloads by bytes and estimated tokens | **kept-evidence** | Diagnostic meter. json/agent stdout for list, ready, show, render-context, and review (list/ready/show are compact AOC envelopes); plus a fixture render-context bundle. Embedded testdata. bytes/4 matches token_budget. |
@@ -243,7 +244,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--issue` | claim, transition, note, decision, amend, show, assign, unassign, etc. | string | Target issue ID (positional alternative in some commands) | **kept-evidence** |
+| `--issue` | claim, transition, note, decision, amend, show, assign, unassign, promotion-ready, etc. | string | Target issue ID (positional alternative in some commands) | **kept-evidence** |
 | `--type` | create, amend, list | string | Issue type (epic, story, feature, task, bug) | **kept-evidence** |
 | `--parent` | create, reparent, list, ready | string | Parent issue ID (or filter) | **kept-evidence** |
 | `--title` | create, sources add | string | Human-readable title | **kept-evidence** |
@@ -273,7 +274,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
-| `--base` | transition, delivery record | string | Delivery base SHA for the ADR 0022 snapshot (distinct from review prepare `--base`) | **kept-evidence** |
+| `--base` | transition, delivery record, promotion-ready | string | Delivery base SHA for the ADR 0022 snapshot (distinct from review prepare `--base`) | **kept-evidence** |
 | `--tip` | transition, delivery record | string | Delivery tip SHA for the ADR 0022 snapshot | **kept-evidence** |
 | `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
 | `--role` | ref | string | Role label on a host name (empty allowed) | **kept-evidence** |
@@ -366,7 +367,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--assessment` | review record, review validate | string | Assessment file or '-' for stdin | **kept-evidence** |
 | `--bundle` | review record, review validate | string | Review bundle file path (required for review validate; optional for review record) | **kept-evidence** |
 | `--base` | review prepare | string | Base revision for review diff (also owned by transition / delivery record for delivery snapshots; see Workflow Flags) | **kept-evidence** |
-| `--head` | review prepare | string | Head revision for diff | **kept-evidence** |
+| `--head` | review prepare, promotion-ready | string | Head revision for diff / delivery tip for promotion-ready | **kept-evidence** |
 | `--clear-context-files` | amend | bool | Remove all context_files entries | **kept-evidence** |
 
 ## Priority Levels (on priority field)
@@ -461,6 +462,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `doctor` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `doctor quarantine` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Hidden leaf. N9 default: agent-facing envelope. |
 | `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `promotion-ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Verify-only; human ok line today. |
 | `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Protocol Output (with `mcp`). `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
 | `mcp` |  | Protocol Output | host MCP newline JSON-RPC on stdio |  | **kept-evidence** | Protocol Output (ADR 0024). Hidden. One tool `arm`. `MarkProtocolOutput` is the exemption. |
 | `heartbeat` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |

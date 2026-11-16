@@ -171,6 +171,7 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		End:         end,
 		Exit:        exit,
 		Uncommitted: uncommitted,
+		CI:          os.Getenv("GITHUB_ACTIONS") == "true",
 		OutputHash:  hex.EncodeToString(sha256Sum(logBytes)),
 		OutputHead:  outputHead,
 		OutputTail:  outputTail,
