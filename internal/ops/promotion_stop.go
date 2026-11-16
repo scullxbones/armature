@@ -3,6 +3,8 @@ package ops
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"sort"
 
 	"github.com/scullxbones/armature/internal/adapters"
 )
@@ -30,6 +32,10 @@ type PromotionStop struct {
 	NoteID   string `json:"note_id,omitempty"`   // root-cause note on clear
 	Dogfood  bool   `json:"dogfood,omitempty"`   // second same-kind → dogfood
 	At       int64  `json:"at,omitempty"`        // unix seconds when recorded
+	// Seq is a read-time tie-break for ActiveStops when At collides.
+	// Assigned by ReadAllPromotionStops (sorted log basename, then line order).
+	// Not serialized into the op payload.
+	Seq int `json:"-"`
 }
 
 // AppendPromotionStop writes a promotion-stop op to the invoking worker's log.
@@ -55,16 +61,27 @@ func AppendPromotionStop(logPath, workerID string, stop PromotionStop) error {
 }
 
 // ReadAllPromotionStops loads promotion-stop ops from every worker log under opsDir.
+// Stops are tagged with Seq in deterministic order: sorted log basename, then
+// append order within each file. Callers that fold history (ActiveStops) must
+// sort by At then Seq — never by ReadDir encounter order alone.
 func ReadAllPromotionStops(opsDir string) ([]PromotionStop, error) {
 	files, err := adapters.ListLogFiles(opsDir)
 	if err != nil {
 		return nil, err
 	}
+	sort.Slice(files, func(i, j int) bool {
+		return filepath.Base(files[i]) < filepath.Base(files[j])
+	})
 	var out []PromotionStop
+	seq := 0
 	for _, file := range files {
 		stops, err := readPromotionStops(file)
 		if err != nil {
 			return nil, err
+		}
+		for i := range stops {
+			stops[i].Seq = seq
+			seq++
 		}
 		out = append(out, stops...)
 	}

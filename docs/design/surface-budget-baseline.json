@@ -1076,7 +1076,7 @@
       ]
     },
     "internal/ops": {
-      "count": 228,
+      "count": 229,
       "names": [
         "AffectsValidity",
         "AppendAndCommit",
@@ -1278,6 +1278,7 @@
         "PromotionStop.Kind",
         "PromotionStop.NoteID",
         "PromotionStop.PR",
+        "PromotionStop.Seq",
         "PromotionStop.Step",
         "PromotionStop.TreeRoot",
         "PromotionStopClear",

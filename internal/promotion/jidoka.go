@@ -72,14 +72,24 @@ func TreeMemberIDs(g Graph, root string) []string {
 }
 
 // ActiveStops folds trip/clear history into currently armed stops (one per tree root).
+// History is applied in (At, Seq) order so later clears/trips win regardless of
+// which worker log file ReadDir returned first.
 func ActiveStops(history []ops.PromotionStop) []ActiveStop {
+	sorted := append([]ops.PromotionStop(nil), history...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].At != sorted[j].At {
+			return sorted[i].At < sorted[j].At
+		}
+		return sorted[i].Seq < sorted[j].Seq
+	})
+
 	type state struct {
 		active ActiveStop
 		armed  bool
 	}
 	byRoot := map[string]*state{}
 	order := make([]string, 0)
-	for _, rec := range history {
+	for _, rec := range sorted {
 		root := rec.TreeRoot
 		if root == "" {
 			continue
