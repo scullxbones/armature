@@ -24,6 +24,8 @@ type ReadyInput struct {
 	IssueIDs     []string
 	Issues       map[string]ReadyIssue
 	GateEvidence []ops.GateEvidence
+	Stops        []ActiveStop // armed jidoka stops (ADR 0026)
+	Graph        Graph        // issue tree for stop coverage; optional
 }
 
 // CheckReady verifies R2/R3/R4 for the requested scopes at HeadSHA.
@@ -36,6 +38,9 @@ func CheckReady(in ReadyInput) error {
 	}
 	if len(in.IssueIDs) == 0 {
 		return fmt.Errorf("promotion-ready: at least one issue scope is required")
+	}
+	if err := checkJidokaStops(in); err != nil {
+		return err
 	}
 	if !hasCIFullGateEvidence(in.GateEvidence, in.HeadSHA) {
 		return fmt.Errorf("promotion-ready: missing CI gate evidence for head %s (profile=full)", in.HeadSHA)

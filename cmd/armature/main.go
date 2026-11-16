@@ -320,6 +320,10 @@ func newRootCmd() *cobra.Command {
 	promotionReadyCmd.GroupID = "admin"
 	root.AddCommand(promotionReadyCmd)
 
+	promotionStopCmd := newPromotionStopCmd()
+	promotionStopCmd.GroupID = "admin"
+	root.AddCommand(promotionStopCmd)
+
 	tuiCmd := newTUICmd()
 	tuiCmd.GroupID = "admin"
 	root.AddCommand(tuiCmd)
@@ -479,6 +483,8 @@ func pavedRoadCommands() map[string]pavedRoadClass {
 		"gate":                    {Kind: pavedRoadKindPaved},
 		"gate run":                {Kind: pavedRoadKindPaved},
 		"promotion-ready":         {Kind: pavedRoadKindEscape, Note: "CI verify-only poka-yoke (ADR 0026 N1). Reviewer path attests; this check never authors."},
+		"promotion-stop":          {Kind: pavedRoadKindEscape, Note: "Jidoka tree-scoped stop clear (ADR 0026). Land/sweep trips; clear needs a root-cause note."},
+		"promotion-stop clear":    {Kind: pavedRoadKindEscape, Note: "Clear a jidoka stop after recording a root-cause note."},
 		"tui":                     {Kind: pavedRoadKindEscape, Note: "Interactive kanban. Agents use list, ready, and show."},
 		"context-history":         {Kind: pavedRoadKindEscape, Note: "Scan git history for context changes. Diagnostic only."},
 		"context-report":          {Kind: pavedRoadKindEscape, Note: "Price fixture-measured CLI payloads. Diagnostic metering, not the daily loop."},

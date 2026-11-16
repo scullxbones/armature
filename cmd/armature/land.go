@@ -106,6 +106,12 @@ func runLand(cmd *cobra.Command, prFlag string, dryRun bool) error {
 		return err
 	}
 	if syncFails(rows) {
+		if !dryRun {
+			graph := promotionGraphFromIssues(snap.Issues)
+			if tripErr := tripJidokaOnFailedRows(cmd, pr, rows, graph); tripErr != nil {
+				return tripErr
+			}
+		}
 		return protocolExitError{code: 1}
 	}
 	return nil

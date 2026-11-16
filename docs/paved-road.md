@@ -142,6 +142,8 @@ Zero unclassified leaf commands is a gate.
 - `arm ops-backup snapshot` — Fail-closed bundle of origin/_armature. Recovery tooling, not wave dispatch.
 - `arm ops-backup verify` — Confirm a bundle advertises a restorable tip.
 - `arm promotion-ready` — CI verify-only poka-yoke (ADR 0026 N1). Reviewer path attests; this check never authors.
+- `arm promotion-stop` — Jidoka tree-scoped stop clear (ADR 0026). Land/sweep trips; clear needs a root-cause note.
+- `arm promotion-stop clear` — Clear a jidoka stop after recording a root-cause note.
 - `arm ref-read` — Fetch host title/body once. Show and list print names without network.
 - `arm reopen` — Rework after done. The road completes once, then syncs.
 - `arm reparent` — Move an issue in the hierarchy after the fact.
