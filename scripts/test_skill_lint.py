@@ -480,7 +480,7 @@ class TestVerifyArmaturePinning(unittest.TestCase):
             ("  git config user.name", True),
             ("git push origin _armature", True),
             ("git worktree list", True),
-            ("git status", True),
+            ("git rev-parse HEAD", True),
             ('capture drive/01 git -C "$TARGET" config --get x', False),
             ('capture drive/05d-remote git -C "$TARGET_REPO" remote add origin "$origin"', False),
             ('git -C "$TARGET" config user.name', False),
