@@ -1464,12 +1464,15 @@ Fetches `refs/pull/N/head` so the delivery tip remains reachable after a squash
 (R1). Selects done leaves whose tip is that pull head (or an ancestor of it),
 runs the same ADR 0022 matcher as `arm sync` / `arm merged`, and appends
 `merged` with the matched squash SHA when done + attestation are already
-stored. `--dry-run` writes nothing (early warning before merge). Idempotent:
-a second apply is a no-op. The post-merge GitHub Action and scheduled sweep
-call this verb; they publish `_armature` only via `arm push-ops`. On
-`missing-assessment` or `check-failed`, jidoka arms a tree-scoped promotion
-stop and opens exactly one andon GitHub issue (PR, ID, failing step). A
-repeated failure kind opens a dogfood finding instead of a second andon.
+stored. `--dry-run` writes nothing (early warning before merge, or after
+merge when every scoped leaf is already `merged` — empty sync envelope, no
+new ops). Idempotent: a second apply is a no-op. The post-merge GitHub
+Action and scheduled sweep call this verb; they publish `_armature` only
+via `arm push-ops`. On `missing-assessment` or `check-failed`, jidoka arms
+a tree-scoped promotion stop and opens exactly one andon GitHub issue (PR,
+ID, failing step). A repeated failure kind opens a dogfood finding instead
+of a second andon. Host operator settings after N1 lands:
+`docs/agents/n1-host-settings.md` (do not flip settings from a PR).
 
 **Flags:**
 - `--pr string`: PR number (required). Digits, `#N`, or a GitHub pull URL.

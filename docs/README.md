@@ -23,6 +23,7 @@ reference only).
 | Doc | Audience | Status |
 |---|---|---|
 | `dogfood-findings.md` | Contributors | Current |
+| `n1-host-settings.md` | Operators | Current — Brian checklist after ADR 0026 N1 (#483); do not flip settings from a PR |
 | `quality-gates.md` | Contributors, agents | Current |
 | `skills.md` | Contributors, agents | Current |
 | `workflow.md` | Contributors, agents | Current |
