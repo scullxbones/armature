@@ -59,6 +59,7 @@ func checkHyphenatedUses(root *cobra.Command) []string {
 		"render-context":  true,
 		"context-report":  true,
 		"ref-read":        true,
+		"promotion-ready": true,
 	}
 
 	subcommandHyphens := map[string]map[string]bool{
@@ -494,6 +495,7 @@ func TestNoHyphenatedRootTopLevel_REQ_NXTTN_S5_T4(t *testing.T) {
 		"render-context":  true,
 		"context-report":  true,
 		"ref-read":        true,
+		"promotion-ready": true,
 	}
 
 	for _, cmd := range root.Commands() {
