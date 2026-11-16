@@ -79,6 +79,11 @@ func runPromotionReady(cmd *cobra.Command, issueIDs []string, base, head string)
 	if err != nil {
 		return fmt.Errorf("read gate evidence: %w", err)
 	}
+	stopHistory, err := ops.ReadAllPromotionStops(filepath.Join(ctx.IssuesDir, "ops"))
+	if err != nil {
+		return fmt.Errorf("read promotion stops: %w", err)
+	}
+	graph := promotionGraphFromIssues(snap.Issues)
 
 	if err := promotion.CheckReady(promotion.ReadyInput{
 		BaseSHA:      base,
@@ -86,6 +91,8 @@ func runPromotionReady(cmd *cobra.Command, issueIDs []string, base, head string)
 		IssueIDs:     issueIDs,
 		Issues:       issues,
 		GateEvidence: evs,
+		Stops:        promotion.ActiveStops(stopHistory),
+		Graph:        graph,
 	}); err != nil {
 		return err
 	}
@@ -107,6 +114,11 @@ func mapPromotionReadyError(err error) error {
 		strings.Contains(msg, "--base is required"),
 		strings.Contains(msg, "--head is required"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm promotion-ready --help"}, err)
+	case strings.Contains(msg, "jidoka stop"):
+		return armerrors.Wrap(codePromotionReady1, msg, []string{
+			"arm promotion-stop clear --issue <id> --msg <root-cause>",
+			"arm doctor",
+		}, err)
 	default:
 		return armerrors.Wrap(codePromotionReady1, msg, []string{
 			"arm review prepare --issue <id> --base <sha> --head <sha>",

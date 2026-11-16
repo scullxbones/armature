@@ -599,10 +599,31 @@ Verify-only pre-merge poka-yoke for ID-scoped deliveries (ADR 0026 N1). Does not
 - (R4) Unknown scope IDs and empty contracts (missing/blank DoD or empty acceptance) fail.
 - (R2) Requires citable `profile=full` gate evidence recorded in CI (`ci=true`) at `--head`.
 - (R3) Requires a valid assessment attestation keyed by delivery `(base, tip)` matching `--base`/`--head`. One assessment for a shared delivery covers several leaves.
+- (Jidoka) An active tree-scoped promotion stop covering any `--issue` fails for that tree only.
 
 **Example:**
 ```bash
 arm promotion-ready --issue task-01 --base "$BASE" --head "$HEAD"
+```
+
+---
+
+## promotion-stop
+
+Manage jidoka tree-scoped promotion stops (ADR 0026). `arm land` / the land Action trip a stop on post-merge or sweep drift; clearing requires a root-cause note.
+
+### promotion-stop clear
+
+**Synopsis:**
+`arm promotion-stop clear --issue <id> --msg <root-cause>`
+
+**Flags:**
+- `--issue string`: Issue ID covered by the stop (required).
+- `--msg string`: Root-cause note (required). Appended as `jidoka-root-cause: …` on the tree root, then the stop is cleared.
+
+**Example:**
+```bash
+arm promotion-stop clear --issue task-01 --msg "squash landed without attestation"
 ```
 
 ---
@@ -1445,17 +1466,20 @@ runs the same ADR 0022 matcher as `arm sync` / `arm merged`, and appends
 `merged` with the matched squash SHA when done + attestation are already
 stored. `--dry-run` writes nothing (early warning before merge). Idempotent:
 a second apply is a no-op. The post-merge GitHub Action and scheduled sweep
-call this verb; they publish `_armature` only via `arm push-ops`.
+call this verb; they publish `_armature` only via `arm push-ops`. On
+`missing-assessment` or `check-failed`, jidoka arms a tree-scoped promotion
+stop and opens exactly one andon GitHub issue (PR, ID, failing step). A
+repeated failure kind opens a dogfood finding instead of a second andon.
 
 **Flags:**
 - `--pr string`: PR number (required). Digits, `#N`, or a GitHub pull URL.
-- `--dry-run`: Classify without writing ops, promotion-check records, delivery-ref deletes, or worktree removals.
+- `--dry-run`: Classify without writing ops, promotion-check records, delivery-ref deletes, or worktree removals. Does not trip jidoka.
 
 **Output:** the same ADR 0017 sync envelope (`count`, `issues[]`, `help[]`).
 
 **Exit:**
 - 0 when no scoped leaf is `missing-assessment` or `check-failed`.
-- 1 when a delivery is on the target and the assessment is missing, or a recorded delivery cannot be checked.
+- 1 when a delivery is on the target and the assessment is missing, or a recorded delivery cannot be checked (after arming jidoka when applicable).
 - `LAND-1` Command Failure when PR parse, pull-head fetch, or snapshot/ops load/persist fails.
 
 ## sync

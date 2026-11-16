@@ -29,6 +29,7 @@ MANDATORY_FLAGS = {
     "decision": ["--topic", "--choice"],
     "merged": ["--issue"],
     "land": ["--pr"],
+    "promotion-stop clear": ["--issue", "--msg"],
     "create": ["--title"],
     "context-history": ["--issue"],
     "reparent": ["--issue", "--parent"],

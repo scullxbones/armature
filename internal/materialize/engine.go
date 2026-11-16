@@ -67,6 +67,7 @@ func opHandlers() map[string]opHandler {
 		ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: onMissingIgnore},
 		ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: onMissingUnspecified},
 		ops.OpGateEvidence:       {apply: applyNoop, missingTarget: onMissingUnspecified},
+		ops.OpPromotionStop:      {apply: applyNoop, missingTarget: onMissingUnspecified},
 		ops.OpLogQuarantine:      {apply: applyNoop, missingTarget: onMissingUnspecified},
 		ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: onMissingIgnore},
 		ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: onMissingIgnore},
