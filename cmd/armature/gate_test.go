@@ -731,6 +731,7 @@ type gateEvidenceJSON struct {
 	End         int64    `json:"end"`
 	Exit        int      `json:"exit"`
 	Uncommitted bool     `json:"uncommitted"`
+	CI          bool     `json:"ci"`
 	OutputHash  string   `json:"output_hash"`
 	OutputHead  string   `json:"output_head"`
 	OutputTail  string   `json:"output_tail"`

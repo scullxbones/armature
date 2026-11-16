@@ -180,6 +180,10 @@
             "type": "boolean",
             "description": "True when the invoking checkout was dirty before or after the command (not citable)"
           },
+          "ci": {
+            "type": "boolean",
+            "description": "True when the wrapper recorded the run under GitHub Actions (ADR 0026 promotion-ready R2)"
+          },
           "output_hash": {
             "type": "string",
             "description": "SHA-256 hex digest of the gate log file"

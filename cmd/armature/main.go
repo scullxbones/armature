@@ -312,6 +312,10 @@ func newRootCmd() *cobra.Command {
 	gateCmd.GroupID = "admin"
 	root.AddCommand(gateCmd)
 
+	promotionReadyCmd := newPromotionReadyCmd()
+	promotionReadyCmd.GroupID = "admin"
+	root.AddCommand(promotionReadyCmd)
+
 	tuiCmd := newTUICmd()
 	tuiCmd.GroupID = "admin"
 	root.AddCommand(tuiCmd)
@@ -469,6 +473,7 @@ func pavedRoadCommands() map[string]pavedRoadClass {
 		"hook run":                {Kind: pavedRoadKindEscape, Note: "Invoke a named git hook. Git and the harness call this, not agents."},
 		"gate":                    {Kind: pavedRoadKindPaved},
 		"gate run":                {Kind: pavedRoadKindPaved},
+		"promotion-ready":         {Kind: pavedRoadKindEscape, Note: "CI verify-only poka-yoke (ADR 0026 N1). Reviewer path attests; this check never authors."},
 		"tui":                     {Kind: pavedRoadKindEscape, Note: "Interactive kanban. Agents use list, ready, and show."},
 		"context-history":         {Kind: pavedRoadKindEscape, Note: "Scan git history for context changes. Diagnostic only."},
 		"context-report":          {Kind: pavedRoadKindEscape, Note: "Price fixture-measured CLI payloads. Diagnostic metering, not the daily loop."},

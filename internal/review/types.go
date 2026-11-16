@@ -266,6 +266,7 @@ type gateEvidence struct {
 	End         int64    `json:"end"`
 	Exit        int      `json:"exit"`
 	Uncommitted bool     `json:"uncommitted,omitempty"`
+	CI          bool     `json:"ci,omitempty"`
 	OutputHash  string   `json:"output_hash,omitempty"`
 	OutputHead  string   `json:"output_head,omitempty"`
 	OutputTail  string   `json:"output_tail,omitempty"`

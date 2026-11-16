@@ -13,7 +13,8 @@ const OpGateEvidence = "gate-evidence"
 
 // GateEvidence is the payload of a gate-evidence op: the process that observed
 // the exit status writes the record. Dirty-tree runs set Uncommitted and are
-// not citable.
+// not citable. CI is set only when the wrapper runs under GitHub Actions
+// (ADR 0026: local runs never count as promotion-ready gate evidence).
 type GateEvidence struct {
 	Profile     string   `json:"profile"`
 	Command     []string `json:"command"`
@@ -22,6 +23,7 @@ type GateEvidence struct {
 	End         int64    `json:"end"`
 	Exit        int      `json:"exit"`
 	Uncommitted bool     `json:"uncommitted,omitempty"`
+	CI          bool     `json:"ci,omitempty"`
 	OutputHash  string   `json:"output_hash,omitempty"`
 	OutputHead  string   `json:"output_head,omitempty"`
 	OutputTail  string   `json:"output_tail,omitempty"`
@@ -31,6 +33,12 @@ type GateEvidence struct {
 // Citable reports whether the run can satisfy a gate criterion (clean tree, exit 0).
 func (e GateEvidence) Citable() bool {
 	return !e.Uncommitted && e.Exit == 0
+}
+
+// PromotionReadyEvidence reports whether the run satisfies ADR 0026 R2 for
+// promotion-ready: citable full profile recorded in CI at the given head.
+func (e GateEvidence) PromotionReadyEvidence(headSHA string) bool {
+	return e.Citable() && e.CI && e.Profile == "full" && e.HeadSHA == headSHA
 }
 
 // AppendGateEvidence writes a gate-evidence op to the invoking worker's log.
