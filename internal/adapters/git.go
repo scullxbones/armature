@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -51,6 +52,9 @@ const (
 	// clone. Network ops run here so git resolves clone config natively; the
 	// namespace is never refs/remotes/origin/* or a user branch.
 	armatureTmpNS = "refs/armature-tmp"
+
+	actionsBotName  = "github-actions[bot]"
+	actionsBotEmail = "41898282+github-actions[bot]@users.noreply.github.com"
 )
 
 func New(repoPath string) *Client {
@@ -168,7 +172,39 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 		"GIT_ASKPASS=true",
 	)
 	cmd.Env = env
+	if len(args) > 0 && args[0] == "commit" {
+		c.applyActionsBotIdentity(cmd)
+	}
 	return cmd
+}
+
+// applyActionsBotIdentity supplies the GitHub Actions bot author only when
+// this process is Actions and git has no author ident. A configured name
+// or GIT_AUTHOR_* is left alone, and nothing is written to git config.
+func (c *Client) applyActionsBotIdentity(cmd *exec.Cmd) {
+	if c == nil || cmd == nil || !strings.EqualFold(strings.TrimSpace(envValFold(cmd.Env, "GITHUB_ACTIONS")), "true") {
+		return
+	}
+	if identFromEnv(cmd.Env) || c.authorIdentConfigured() {
+		return
+	}
+	cmd.Env = stripEnvKeys(cmd.Env, "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL")
+	cmd.Env = append(cmd.Env,
+		"GIT_AUTHOR_NAME="+actionsBotName,
+		"GIT_AUTHOR_EMAIL="+actionsBotEmail,
+		"GIT_COMMITTER_NAME="+actionsBotName,
+		"GIT_COMMITTER_EMAIL="+actionsBotEmail,
+	)
+}
+
+func identFromEnv(env []string) bool {
+	return strings.TrimSpace(envValFold(env, "GIT_AUTHOR_NAME")) != "" &&
+		strings.TrimSpace(envValFold(env, "GIT_AUTHOR_EMAIL")) != ""
+}
+
+func (c *Client) authorIdentConfigured() bool {
+	out, err := c.cmd("var", "GIT_AUTHOR_IDENT").Output()
+	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
 func gitOverrideEnvPrefixes() []string {
@@ -775,6 +811,9 @@ func enhanceGitLockfileError(base, out string) string {
 }
 
 func (c *Client) Push(branch string) error {
+	if branch == "" || strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, " \t\r\n") {
+		return fmt.Errorf("refusing unsafe push refspec")
+	}
 	cmd, ctx, cancel := c.withPublishDeadline().networkCmd("push", "origin", branch)
 	defer cancel()
 	out, err := cmd.CombinedOutput()
@@ -944,10 +983,12 @@ func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.Context, context
 }
 
 // applyEphemeralGitHubHTTPAuth appends GIT_CONFIG_* on cmd so git sees a
-// host-scoped http.extraHeader for github.com only. Non-GitHub HTTPS origins
-// get no header. The token never appears in cmd.Args and is not written to
-// .git/config. Inherited GIT_CONFIG_KEY_N / VALUE_N entries are preserved:
-// COUNT is read and the auth pair is written at the next free index.
+// host-scoped http.extraHeader for github.com only. GitHub's git HTTPS
+// endpoint rejects Authorization: Bearer ("invalid credentials"); the value
+// is basic base64(x-access-token:TOKEN), the same scheme actions/checkout
+// uses. The raw token is removed from the child env and is never placed in
+// cmd.Args or .git/config. Inherited GIT_CONFIG_KEY_N / VALUE_N entries are
+// preserved: COUNT is read and the auth pair is written at the next free index.
 func (c *Client) applyEphemeralGitHubHTTPAuth(cmd *exec.Cmd) {
 	if cmd == nil {
 		return
@@ -965,7 +1006,7 @@ func (c *Client) applyEphemeralGitHubHTTPAuth(cmd *exec.Cmd) {
 		return
 	}
 	key := "http.https://" + host + "/.extraHeader"
-	val := "AUTHORIZATION: bearer " + token
+	val := gitHubHTTPAuthHeader(token)
 	env := cmd.Env
 	if len(env) == 0 {
 		env = os.Environ()
@@ -973,7 +1014,7 @@ func (c *Client) applyEphemeralGitHubHTTPAuth(cmd *exec.Cmd) {
 		env = append([]string(nil), env...)
 	}
 	idx := nextGitConfigIndex(env)
-	env = stripEnvKeys(env, "GIT_CONFIG_COUNT")
+	env = stripEnvKeys(env, "GIT_CONFIG_COUNT", "GITHUB_TOKEN")
 	env = append(env,
 		"GIT_CONFIG_COUNT="+strconv.Itoa(idx+1),
 		"GIT_CONFIG_KEY_"+strconv.Itoa(idx)+"="+key,
@@ -1028,6 +1069,10 @@ func stripEnvKeys(environ []string, keys ...string) []string {
 		out = append(out, e)
 	}
 	return out
+}
+
+func gitHubHTTPAuthHeader(token string) string {
+	return "AUTHORIZATION: basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+token))
 }
 
 func (c *Client) githubToken() string {

@@ -881,6 +881,14 @@ the command exits non-zero; origin is not updated.
   `skipped_validate_gate`. Never a green publish.
 - `--reason string`: Recorded reason for `--override-validate`.
 
+GitHub Actions publishes with the job `GITHUB_TOKEN`. `arm` sends it as a
+host-scoped `Authorization: basic` header (`base64(x-access-token:TOKEN)`),
+not as a bearer token and not in the remote URL. When
+`ARM_LAND_PROOF_REF` is `refs/heads/_armature-ci-proof/<id>`, the push goes
+to that ref and `origin/_armature` is left unchanged. Any other value is
+refused. The Arm land workflow sets it only for `workflow_dispatch` proof
+runs and deletes the ref afterwards.
+
 ---
 
 ## ops-backup
