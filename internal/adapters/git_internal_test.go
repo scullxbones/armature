@@ -475,6 +475,42 @@ func TestEphemeralGitHubAuth_ScopedEnvNotArgs_REQ_481(t *testing.T) {
 		}
 	})
 
+	t.Run("inherited_GIT_CONFIG_survives", func(t *testing.T) {
+		t.Parallel()
+		repo := seedRepoOriginURL(t, "https://github.com/scullxbones/armature-auth-probe.git")
+		base := append(os.Environ(),
+			"GIT_CONFIG_COUNT=1",
+			"GIT_CONFIG_KEY_0=user.name",
+			"GIT_CONFIG_VALUE_0=inherited-probe",
+			"GITHUB_TOKEN="+probe,
+		)
+		c := New(repo).WithEnviron(base)
+		cmd, _, cancel := c.networkCmd("ls-remote", "--refs", "origin", "HEAD")
+		defer cancel()
+		env := strings.Join(cmd.Env, "\n")
+		if !strings.Contains(env, "GIT_CONFIG_COUNT=2") {
+			t.Fatal("expected GIT_CONFIG_COUNT=2 after appending auth")
+		}
+		if !strings.Contains(env, "GIT_CONFIG_KEY_0=user.name") {
+			t.Fatal("inherited GIT_CONFIG_KEY_0 must survive")
+		}
+		if !strings.Contains(env, "GIT_CONFIG_VALUE_0=inherited-probe") {
+			t.Fatal("inherited GIT_CONFIG_VALUE_0 must survive")
+		}
+		if !strings.Contains(env, "GIT_CONFIG_KEY_1=http.https://github.com/.extraHeader") {
+			t.Fatal("expected auth at next free index KEY_1")
+		}
+		wantVal := "GIT_CONFIG_VALUE_1=AUTHORIZATION: bearer " + probe
+		if !strings.Contains(env, wantVal) {
+			t.Fatal("expected bearer token in GIT_CONFIG_VALUE_1 only")
+		}
+		for _, a := range cmd.Args {
+			if strings.Contains(a, probe) || strings.Contains(strings.ToLower(a), "authorization") {
+				t.Fatalf("token/header must not appear in cmd.Args: %q", a)
+			}
+		}
+	})
+
 	t.Run("non_github_https_no_header", func(t *testing.T) {
 		t.Parallel()
 		repo := seedRepoOriginURL(t, "https://example.com/scullxbones/armature-auth-probe.git")
@@ -494,6 +530,31 @@ func TestEphemeralGitHubAuth_ScopedEnvNotArgs_REQ_481(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestNextGitConfigIndex_REQ_481(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		env  []string
+		want int
+	}{
+		{name: "empty", want: 0},
+		{name: "unset", env: []string{"PATH=/bin"}, want: 0},
+		{name: "zero", env: []string{"GIT_CONFIG_COUNT=0"}, want: 0},
+		{name: "one", env: []string{"GIT_CONFIG_COUNT=1"}, want: 1},
+		{name: "invalid", env: []string{"GIT_CONFIG_COUNT=nope"}, want: 0},
+		{name: "negative", env: []string{"GIT_CONFIG_COUNT=-1"}, want: 0},
+		{name: "last_wins", env: []string{"GIT_CONFIG_COUNT=1", "GIT_CONFIG_COUNT=3"}, want: 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := nextGitConfigIndex(tc.env); got != tc.want {
+				t.Fatalf("nextGitConfigIndex(%v) = %d, want %d", tc.env, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestHTTPSGitHubHost_REQ_481(t *testing.T) {
