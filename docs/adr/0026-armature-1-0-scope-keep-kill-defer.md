@@ -66,7 +66,7 @@ because it depends on N1. Item 45 is rank 11 and may land beside any phase.
 
 | Rank | Workstream | What 1.0 builds |
 |---|---|---|
-| 1 | N1 promotion from the host | The design in the N1 section below. Decided here. Not yet built. |
+| 1 | N1 promotion from the host | The design in the N1 section below. Built as #480–#483 (`promotion-ready`, `arm land`, jidoka, fixture proof + settings checklist). |
 | 2 | Item 28 harness contract | One contract, five harnesses: Claude, Codex, Devin, Cursor, Grok Build. |
 | 3 | Cursor setup | Required `arm mcp`, plus dogfood collection. Absorbs item 37. |
 | 4 | Materialization speed | Replaces item 44 ops compaction. Target 10–100 ms. Today: warm ~956 ms, cold ~5.2 s, `render-context` ~5.8 s. |
@@ -103,7 +103,7 @@ Each row stays out until its revive trigger fires. Item 46 is a hold, not a canc
 | Task-scope idea 3, post-Bash diff | A harness offers a post-shell hook. It then becomes a detect column. |
 | Task-scope idea 4, protect hook config | A partner runs untrusted agents. Until then, document per-harness managed-config support. Do not build the hook. |
 
-### N1 design (decided, not yet built)
+### N1 design (decided; built as #480–#483)
 
 Requirements:
 
@@ -137,9 +137,10 @@ note. A repeated failure kind is filed as a dogfood finding.
 Build order is the phase list. Value rank stays the keep table. The living
 sequence is `docs/design/next-work-sequencing.md`.
 
-- **Phase 0, truth.** N1, then the skills diet. The diet depends on N1:
-  reviewer is the attestation engine, and the worker rewrite targets the
-  cloud-agent workflow this design assumes.
+- **Phase 0, truth.** N1 (built #480–#483), then the skills diet. The diet
+  depends on N1: reviewer is the attestation engine, and the worker rewrite
+  targets the cloud-agent workflow this design assumes. Host settings stay
+  human-owned (`docs/agents/n1-host-settings.md`).
 - **Phase 1, speed.** Workstream 4.
 - **Phase 2, reach.** Item 28, the Cursor setup with `arm mcp`, and N3
   scope at claim.
