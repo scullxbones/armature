@@ -616,7 +616,7 @@ func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 }
 
 // checkD13MergedWithoutDeliveryMatch warns when a merged leaf carries no stored
-// delivery match (ADR 0022 §8): only arm sync / arm merged write matched_commit,
+// delivery match (ADR 0022 §8): arm sync / arm merged / arm land write matched_commit,
 // so a merged leaf without one predates ADR 0022 or bypassed it. Parents are
 // skipped because rollup never records a delivery. Read-only: never demotes.
 func checkD13MergedWithoutDeliveryMatch(allIssues map[string]*materialize.Issue) Finding {

@@ -844,22 +844,50 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	if branch == "" || dstRef == "" {
 		return fmt.Errorf("fetch branch to ref: branch and destination ref are required")
 	}
+	return c.fetchOriginRefSpec("+refs/heads/"+branch+":"+dstRef, branch)
+}
+
+// FetchPullHead force-fetches origin refs/pull/<pr>/head into
+// refs/armature/pull/<pr>/head and returns its SHA (ADR 0026 R1). After a
+// squash merge the tip may exist only on that pull ref.
+func (c *Client) FetchPullHead(pr string) (string, error) {
+	pr = strings.TrimSpace(pr)
+	if pr == "" {
+		return "", fmt.Errorf("fetch pull head: PR number is required")
+	}
+	for _, r := range pr {
+		if r < '0' || r > '9' {
+			return "", fmt.Errorf("fetch pull head: PR number %q must be digits", pr)
+		}
+	}
+	src := "refs/pull/" + pr + "/head"
+	dst := "refs/armature/pull/" + pr + "/head"
+	if err := c.fetchOriginRefSpec("+"+src+":"+dst, src); err != nil {
+		return "", err
+	}
+	sha, err := c.ResolveRevision(dst)
+	if err != nil {
+		return "", fmt.Errorf("resolve fetched pull head %s: %w", dst, err)
+	}
+	return sha, nil
+}
+
+func (c *Client) fetchOriginRefSpec(spec, label string) error {
 	// Fail-fast if origin has no URL; fetch addresses the named remote so
 	// remote.origin.* (proxy, tagOpt, …) applies and multi-valued URLs stay
 	// first-wins (git fetch by name). Do not -c remote.origin.url= — that
 	// appends a value and does not override.
 	remoteURL, err := c.firstRemoteURL("origin")
 	if err != nil {
-		return fmt.Errorf("fetch branch to ref: %w", err)
+		return fmt.Errorf("fetch origin ref: %w", err)
 	}
 	return c.withStagingLock(func() error {
-		spec := "+refs/heads/" + branch + ":" + dstRef
 		cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
 		defer cancel()
 		out, fetchErr := cmd.CombinedOutput()
 		out, fetchErr = networkResult(ctx, out, fetchErr)
 		if fetchErr != nil {
-			wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", branch, remoteURL, fetchErr, out)
+			wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", label, remoteURL, fetchErr, out)
 			if remoteRefMissingText(string(out)) || remoteRefMissingText(fetchErr.Error()) {
 				return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
 			}
