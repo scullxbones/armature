@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Hermetic proof that `arm promotion-ready` verify-only behavior works in CI.
-# Does not author assessments with a model and needs no secrets.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

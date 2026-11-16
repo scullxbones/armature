@@ -145,9 +145,7 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 }
 
 // setupForeignExpiredMergedFixture builds G2(merged)→P2(done)→OS foreign claimed
-// with --ttl 1 already past expiry. Expiry is deterministic: append a claim op
-// with a stale timestamp into a *new* foreign ops log (uncommitted suffix is
-// visible to materialize). No time.Sleep; safe under t.Parallel.
+// with --ttl 1 already past expiry.
 func setupForeignExpiredMergedFixture(t *testing.T) (repo, workerID string) {
 	t.Helper()
 	repo = gittest.InitWithOrigin(t).Dir
@@ -159,8 +157,6 @@ func setupForeignExpiredMergedFixture(t *testing.T) (repo, workerID string) {
 	workerID, logPath, err = resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
 
-	// Timestamps must stay ordered (create < claim < merge) while claim is
-	// still older than now by > TTL minutes so LeaseLive is false.
 	now := nowEpoch()
 	createAt := now - 200
 	claimAt := now - 120 // ttl=1m → expired; after creates so replay finds OS

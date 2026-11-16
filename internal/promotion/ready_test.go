@@ -61,7 +61,7 @@ func TestCheckReady_MissingCIGateEvidenceFails_REQ_480(t *testing.T) {
 			Profile: "full",
 			HeadSHA: tip,
 			Exit:    0,
-			CI:      false, // local run must not count
+			CI:      false,
 		}},
 	})
 	require.Error(t, err)
@@ -117,13 +117,12 @@ func TestCheckReady_SharedDiffOneAssessmentSeveralLeaves_REQ_480(t *testing.T) {
 			"leaf-a": {
 				DefinitionOfDone: "a done",
 				Acceptance:       json.RawMessage(`["a"]`),
-				Assessments:      nil, // no per-leaf attestation
+				Assessments:      nil,
 			},
 			"leaf-b": {
 				DefinitionOfDone: "b done",
 				Acceptance:       json.RawMessage(`["b"]`),
-				// one assessment keyed by delivery covers both leaves
-				Assessments: []promotion.AssessmentFact{{BaseSHA: base, HeadSHA: tip}},
+				Assessments:      []promotion.AssessmentFact{{BaseSHA: base, HeadSHA: tip}},
 			},
 		},
 		IssueIDs:     []string{"leaf-a", "leaf-b"},

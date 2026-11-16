@@ -91,7 +91,6 @@ func TestPromotionReadyCLI_SharedDiffOneAssessmentSeveralLeaves_REQ_480(t *testi
 }
 
 func TestGateRunMarksCIUnderGitHubActions_REQ_480(t *testing.T) {
-	// t.Setenv forbids t.Parallel.
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{"full": {"true"}})
 	t.Setenv("GITHUB_ACTIONS", "true")
