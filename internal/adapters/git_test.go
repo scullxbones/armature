@@ -2779,12 +2779,14 @@ exec "$real_git" "$@"
 	assert.Less(t, elapsed, 3*time.Second, "stalled remote must fail-closed near timeout+WaitDelay")
 }
 
-// countingHTTPProxy listens on 127.0.0.1 and counts Accepts. When answer is true
-// it returns HTTP 503 so git fail-closes after the dial; when false it blackholes
-// (Accept + discard). Each Accept signals on accepted so honor proofs wait on that
-// channel (and hit growth) instead of asserting after a wall-clock network deadline
-// — the residual macOS race that survived #463's answering-proxy change (#462).
-func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic.Int64, accepted <-chan struct{}) {
+type proxyDial int
+
+const (
+	proxyBlackhole proxyDial = iota
+	proxyAnswer503
+)
+
+func countingHTTPProxy(t *testing.T, mode proxyDial) (proxyURL string, hits *atomic.Int64, accepted <-chan struct{}) {
 	t.Helper()
 	hits = &atomic.Int64{}
 	ch := make(chan struct{}, 64)
@@ -2804,7 +2806,7 @@ func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic
 			}
 			go func(c net.Conn) {
 				defer swallowClose(c)
-				if !answer {
+				if mode == proxyBlackhole {
 					_, copyErr := io.Copy(io.Discard, c)
 					swallowErr(copyErr)
 					return
@@ -2866,7 +2868,7 @@ func proxyProofRepo(t *testing.T, proxyURL string) (repo, tip string) {
 
 func TestRemoteOriginProxyProof_BlackholeMissesTightDeadline_REQ_462(t *testing.T) {
 	t.Parallel()
-	proxyURL, hits, _ := countingHTTPProxy(t, false)
+	proxyURL, hits, _ := countingHTTPProxy(t, proxyBlackhole)
 	repo, tip := proxyProofRepo(t, proxyURL)
 	c := adapters.New(repo).WithNetworkTimeout(time.Nanosecond)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
@@ -2878,7 +2880,7 @@ func TestRemoteOriginProxyProof_BlackholeMissesTightDeadline_REQ_462(t *testing.
 
 func TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462(t *testing.T) {
 	t.Parallel()
-	proxyURL, hits, accepted := countingHTTPProxy(t, true)
+	proxyURL, hits, accepted := countingHTTPProxy(t, proxyAnswer503)
 	repo, tip := proxyProofRepo(t, proxyURL)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
@@ -2897,7 +2899,7 @@ func TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462(
 func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 
-	proxyURL, hits, accepted := countingHTTPProxy(t, true)
+	proxyURL, hits, accepted := countingHTTPProxy(t, proxyAnswer503)
 	repo, tip := proxyProofRepo(t, proxyURL)
 
 	c := adapters.New(repo)
