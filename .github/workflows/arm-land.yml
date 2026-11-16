@@ -1,6 +1,7 @@
 # ADR 0026 N1 (#481): post-merge apply via `arm land --pr` + scheduled sweep.
 # One writer (concurrency group). FF-only `_armature` via `arm push-ops`.
-# Workflow token only — no new secrets.
+# Workflow token only — no new secrets. Token never written into git config /
+# remote URL; networkCmd injects Authorization per-command from GITHUB_TOKEN.
 name: Arm land
 
 on:
@@ -54,12 +55,13 @@ jobs:
       - name: Build arm binary
         run: make build
 
-      - name: Authenticate origin for FF push of _armature
+      - name: Fetch ops branch tip (ephemeral header auth)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
+          # Do not embed the token in remote.origin.url / git config.
+          git -c "http.extraHeader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" \
+            fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
 
       - name: Attach ops worktree and register CI worker
         run: |
@@ -67,6 +69,9 @@ jobs:
           ./bin/arm worker-init --check || ./bin/arm worker-init
 
       - name: Land merged PR or sweep
+        id: land
+        # Sweep may fail some PRs while others wrote ops; still publish below.
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
@@ -74,4 +79,13 @@ jobs:
         run: bash scripts/arm-land-ci.sh
 
       - name: Publish ops (FF-only via arm push-ops)
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./bin/arm push-ops
+
+      - name: Fail job if land failed
+        if: ${{ steps.land.outcome == 'failure' }}
+        run: |
+          echo "arm-land: land step failed after push-ops attempt" >&2
+          exit 1

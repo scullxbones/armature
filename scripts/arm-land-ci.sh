@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Host entry for ADR 0026 N1 (#481): run `arm land --pr` for one merged PR,
-# or sweep recent merged PRs. No model, no extra secrets — GITHUB_TOKEN only.
+# or sweep recent merged PRs. No model, no extra secrets — GITHUB_TOKEN only
+# (consumed by arm networkCmd as an ephemeral http.extraHeader; never written
+# into remote URLs / git config by this script).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,14 +44,27 @@ pull_request|workflow_dispatch)
 	;;
 esac
 
-# Scheduled / dispatch sweep: land recent merged PRs (idempotent).
+# Scheduled / dispatch sweep: attempt every recent merged PR. Do not abort the
+# loop on the first failure — successful lands must still reach push-ops in the
+# workflow. Exit non-zero after the loop so the job fails after publish.
 command -v gh >/dev/null 2>&1 || die "gh is required for the merged-PR sweep"
 mapfile -t prs < <(gh pr list --state merged --limit 30 --json number --jq '.[].number')
 if [[ ${#prs[@]} -eq 0 ]]; then
 	echo "arm-land-ci: no merged PRs to sweep"
 	exit 0
 fi
+failed=0
+failed_prs=()
 for pr in "${prs[@]}"; do
-	land_one "$pr" || die "land --pr ${pr} failed"
+	if land_one "$pr"; then
+		continue
+	fi
+	echo "arm-land-ci: land --pr ${pr} failed (continuing sweep)" >&2
+	failed=1
+	failed_prs+=("$pr")
 done
+if [[ "$failed" -ne 0 ]]; then
+	echo "arm-land-ci: sweep finished with failures: ${failed_prs[*]}" >&2
+	exit 1
+fi
 echo "arm-land-ci: sweep OK (${#prs[@]} PRs)"
