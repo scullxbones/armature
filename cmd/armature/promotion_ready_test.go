@@ -15,7 +15,7 @@ import (
 func TestPromotionReadyCLI_FreshPass_REQ_480(t *testing.T) {
 	t.Parallel()
 	repo, base, tip := promotionReadyFixture(t)
-	recordAssessmentFor(t, repo, "task-01", base, tip)
+	recordAssessmentForTask01(t, repo, base, tip)
 	plantCIGateEvidence(t, repo, tip)
 
 	out, err := runTrls(t, repo, "promotion-ready", "--issue", "task-01", "--base", base, "--head", tip)
@@ -47,7 +47,7 @@ func TestPromotionReadyCLI_UnknownScopeFails_REQ_480(t *testing.T) {
 func TestPromotionReadyCLI_MissingCIGateEvidenceFails_REQ_480(t *testing.T) {
 	t.Parallel()
 	repo, base, tip := promotionReadyFixture(t)
-	recordAssessmentFor(t, repo, "task-01", base, tip)
+	recordAssessmentForTask01(t, repo, base, tip)
 
 	_, err := runTrls(t, repo, "promotion-ready", "--issue", "task-01", "--base", base, "--head", tip)
 	require.Error(t, err)
@@ -57,7 +57,7 @@ func TestPromotionReadyCLI_MissingCIGateEvidenceFails_REQ_480(t *testing.T) {
 func TestPromotionReadyCLI_StaleHeadAssessmentFails_REQ_480(t *testing.T) {
 	t.Parallel()
 	repo, base, tip := promotionReadyFixture(t)
-	recordAssessmentFor(t, repo, "task-01", base, tip)
+	recordAssessmentForTask01(t, repo, base, tip)
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "extra.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "git", "add", "extra.go")
@@ -76,7 +76,7 @@ func TestPromotionReadyCLI_SharedDiffOneAssessmentSeveralLeaves_REQ_480(t *testi
 	plantVerifiedTask(t, repo, "task-02", "shared.go")
 	_, err := runTrls(t, repo, "amend", "--issue", "task-02", "--acceptance", testAcceptance, "--dod", "task-02 done")
 	require.NoError(t, err)
-	recordAssessmentFor(t, repo, "task-01", base, tip)
+	recordAssessmentForTask01(t, repo, base, tip)
 	plantCIGateEvidence(t, repo, tip)
 
 	out, err := runTrls(t, repo,
@@ -158,8 +158,9 @@ func plantEmptyContractTask(t *testing.T, repo, id string) {
 	}))
 }
 
-func recordAssessmentFor(t *testing.T, repo, issueID, base, tip string) {
+func recordAssessmentForTask01(t *testing.T, repo, base, tip string) {
 	t.Helper()
+	const issueID = "task-01"
 	bundlePath := filepath.Join(repo, issueID+"-bundle.json")
 	_, err := runTrls(t, repo, "review", "prepare", "--issue", issueID, "--base", base, "--head", tip, "--output", bundlePath)
 	require.NoError(t, err)
