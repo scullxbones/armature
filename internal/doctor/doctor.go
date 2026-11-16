@@ -345,7 +345,7 @@ func targetsWithOnlyFullyDeletedNotes(allOps []ops.Op) map[string]bool {
 			} else {
 				ns.deleted = true
 			}
-		case ops.OpSourceFingerprint, ops.OpGateEvidence, ops.OpLogQuarantine:
+		case ops.OpSourceFingerprint, ops.OpGateEvidence, ops.OpPromotionStop, ops.OpLogQuarantine:
 		default:
 			otherRefs[op.TargetID] = true
 		}

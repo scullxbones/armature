@@ -37,7 +37,7 @@ const (
 // profile name) and must not be treated as unknown or as an orphaned issue.
 func IsAuditOnly(opType string) bool {
 	switch opType {
-	case OpSourceFingerprint, OpGateEvidence, OpLogQuarantine:
+	case OpSourceFingerprint, OpGateEvidence, OpLogQuarantine, OpPromotionStop:
 		return true
 	default:
 		return false
