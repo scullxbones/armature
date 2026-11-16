@@ -54,6 +54,22 @@ not name this flag.`,
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
+			proofRef, proofErr := landProofPublishRef(envFrom(cmd))
+			if proofErr != nil {
+				return proofErr
+			}
+			if proofRef != "" {
+				if err := gc.Push("refs/heads/_armature:" + proofRef); err != nil {
+					return wrapOpsPublishFailure("PUSH-OPS-1", newOpsPublishError(fmt.Errorf("push-ops: proof publish failed: %w", err)))
+				}
+				if isStructuredFormat(format) {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "{\"status\":\"pushed\",\"branch\":%q}\n", proofRef)
+				} else {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Pushed %s; origin/_armature unchanged\n", proofRef)
+				}
+				return nil
+			}
+
 			if err := pushOpsBranchAfter(ctx, gc, state.tracker, publishValidateAfterIntegrate(ctx, gc, skipValidate), skipValidate); err != nil {
 				code := "PUSH-OPS-1"
 				if strings.Contains(err.Error(), "push refused: validation") {
@@ -75,6 +91,37 @@ not name this flag.`,
 		"Human escape hatch: publish despite a dirty graph. Requires --reason and a TTY. Never green.")
 	cmd.Flags().StringVar(&reason, "reason", "", "Recorded reason for --override-validate")
 	return cmd
+}
+
+// landProofPublishRef returns the throwaway ref for a workflow_dispatch proof
+// run. Unset means publish origin/_armature. Any other shape is refused so
+// the variable cannot retarget main or _armature.
+func landProofPublishRef(env Env) (string, error) {
+	ref := strings.TrimSpace(envLookup(env, "ARM_LAND_PROOF_REF"))
+	if ref == "" {
+		return "", nil
+	}
+	const prefix = "refs/heads/_armature-ci-proof/"
+	id, ok := strings.CutPrefix(ref, prefix)
+	if !ok || !proofRefID(id) {
+		return "", fmt.Errorf("ARM_LAND_PROOF_REF must be refs/heads/_armature-ci-proof/<id>")
+	}
+	return ref, nil
+}
+
+func proofRefID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	for i, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case i > 0 && (r == '.' || r == '_' || r == '-'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func recordPublishValidateOverride(cmd *cobra.Command, state *executionState, reason string) error {

@@ -1,6 +1,9 @@
 # ADR 0026 N1 (#481): post-merge apply via `arm land --pr` + scheduled sweep.
 # Workflow token only — no new secrets. Token never written into git config /
-# remote URL; networkCmd injects Authorization per-command from GITHUB_TOKEN.
+# remote URL. networkCmd and scripts/github-actions-git-auth.sh send
+# Authorization: basic base64(x-access-token:TOKEN) for github.com.
+# workflow_dispatch input proof pushes refs/heads/_armature-ci-proof/<run_id>
+# and deletes it. That path does not publish _armature and does not land PRs.
 name: Arm land
 
 on:
@@ -15,6 +18,11 @@ on:
         description: "PR number to land (empty = sweep recent merged PRs)"
         required: false
         type: string
+      proof:
+        description: "Proof only: bootstrap, push _armature-ci-proof/<run_id>, delete it. Does not land PRs or publish _armature."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: armature-land
@@ -60,31 +68,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Host-scoped GitHub auth via GIT_CONFIG_* (Git ≥2.31). Never -c with
-          # the token (visible in ps/argv) and never write remote URL / .git/config.
-          # Append at the next free index so inherited GIT_CONFIG_* survive.
-          # Export under set +x (not env argv / prefix assignment) so the token
-          # never appears as an argv element or in -x traces; restore -x only
-          # if it was on.
-          count="${GIT_CONFIG_COUNT:-0}"
-          case "$count" in
-            ''|*[!0-9]*) count=0 ;;
-          esac
-          idx="$count"
-          next=$((count + 1))
-          xtrace_was_on=0
-          case "$-" in
-            *x*) xtrace_was_on=1 ;;
-          esac
-          set +x
-          export GIT_CONFIG_COUNT="${next}"
-          export "GIT_CONFIG_KEY_${idx}=http.https://github.com/.extraHeader"
-          export "GIT_CONFIG_VALUE_${idx}=AUTHORIZATION: bearer ${GITHUB_TOKEN}"
-          git fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
-          unset GIT_CONFIG_COUNT
-          unset "GIT_CONFIG_KEY_${idx}"
-          unset "GIT_CONFIG_VALUE_${idx}"
-          if [ "$xtrace_was_on" -eq 1 ]; then set -x; fi
+          # shellcheck disable=SC1091
+          source scripts/github-actions-git-auth.sh
+          github_actions_git_auth_export
+          (
+            unset GITHUB_TOKEN
+            export GIT_TERMINAL_PROMPT=0
+            git fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
+          )
 
       - name: Attach ops worktree and register CI worker
         run: |
@@ -93,6 +84,7 @@ jobs:
 
       - name: Land merged PR or sweep
         id: land
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.proof != 'true' }}
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -104,7 +96,23 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARM_LAND_PROOF_REF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.proof == 'true' && format('refs/heads/_armature-ci-proof/{0}', github.run_id) || '' }}
         run: ./bin/arm push-ops
+
+      - name: Delete proof ref
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.proof == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROOF_REF: refs/heads/_armature-ci-proof/${{ github.run_id }}
+        run: |
+          # shellcheck disable=SC1091
+          source scripts/github-actions-git-auth.sh
+          github_actions_git_auth_export
+          (
+            unset GITHUB_TOKEN
+            export GIT_TERMINAL_PROMPT=0
+            git push origin ":${PROOF_REF}"
+          )
 
       - name: Fail job if land failed
         if: ${{ steps.land.outcome == 'failure' }}

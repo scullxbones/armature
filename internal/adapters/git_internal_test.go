@@ -2,10 +2,12 @@ package adapters
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -446,7 +448,8 @@ func TestExactRefFromPatternOutput_REQ_TOPTIER_S12_T1G(t *testing.T) {
 
 func TestEphemeralGitHubAuth_ScopedEnvNotArgs_REQ_481(t *testing.T) {
 	t.Parallel()
-	probe := "ghs_" + "ARGS_PROBE_481_TOKEN"
+	// '!' cannot appear in base64, so a raw token in argv or the child env fails the leak check.
+	probe := "ghs_" + "ARGS_PROBE_481_TOKEN!"
 
 	t.Run("github_https_uses_GIT_CONFIG_env", func(t *testing.T) {
 		t.Parallel()
@@ -454,25 +457,7 @@ func TestEphemeralGitHubAuth_ScopedEnvNotArgs_REQ_481(t *testing.T) {
 		c := New(repo).WithEnviron(append(os.Environ(), "GITHUB_TOKEN="+probe))
 		cmd, _, cancel := c.networkCmd("ls-remote", "--refs", "origin", "HEAD")
 		defer cancel()
-		for _, a := range cmd.Args {
-			if strings.Contains(a, probe) || strings.Contains(strings.ToLower(a), "authorization") {
-				t.Fatalf("token/header must not appear in cmd.Args: %q", a)
-			}
-			if strings.HasPrefix(a, "http.extraHeader=") || strings.Contains(a, "AUTHORIZATION: bearer") {
-				t.Fatalf("must not inject auth via -c argv: %v", cmd.Args)
-			}
-		}
-		env := strings.Join(cmd.Env, "\n")
-		if !strings.Contains(env, "GIT_CONFIG_COUNT=1") {
-			t.Fatal("expected GIT_CONFIG_COUNT=1 on github.com origin")
-		}
-		if !strings.Contains(env, "GIT_CONFIG_KEY_0=http.https://github.com/.extraHeader") {
-			t.Fatal("expected host-scoped http.https://github.com/.extraHeader key")
-		}
-		wantVal := "GIT_CONFIG_VALUE_0=AUTHORIZATION: bearer " + probe
-		if !strings.Contains(env, wantVal) {
-			t.Fatal("expected bearer token in GIT_CONFIG_VALUE_0 only")
-		}
+		assertGitHubAuthNoLeak(t, cmd.Args, cmd.Env, probe, 0)
 	})
 
 	t.Run("inherited_GIT_CONFIG_survives", func(t *testing.T) {
@@ -487,27 +472,13 @@ func TestEphemeralGitHubAuth_ScopedEnvNotArgs_REQ_481(t *testing.T) {
 		c := New(repo).WithEnviron(base)
 		cmd, _, cancel := c.networkCmd("ls-remote", "--refs", "origin", "HEAD")
 		defer cancel()
+		assertGitHubAuthNoLeak(t, cmd.Args, cmd.Env, probe, 1)
 		env := strings.Join(cmd.Env, "\n")
-		if !strings.Contains(env, "GIT_CONFIG_COUNT=2") {
-			t.Fatal("expected GIT_CONFIG_COUNT=2 after appending auth")
-		}
 		if !strings.Contains(env, "GIT_CONFIG_KEY_0=user.name") {
 			t.Fatal("inherited GIT_CONFIG_KEY_0 must survive")
 		}
 		if !strings.Contains(env, "GIT_CONFIG_VALUE_0=inherited-probe") {
 			t.Fatal("inherited GIT_CONFIG_VALUE_0 must survive")
-		}
-		if !strings.Contains(env, "GIT_CONFIG_KEY_1=http.https://github.com/.extraHeader") {
-			t.Fatal("expected auth at next free index KEY_1")
-		}
-		wantVal := "GIT_CONFIG_VALUE_1=AUTHORIZATION: bearer " + probe
-		if !strings.Contains(env, wantVal) {
-			t.Fatal("expected bearer token in GIT_CONFIG_VALUE_1 only")
-		}
-		for _, a := range cmd.Args {
-			if strings.Contains(a, probe) || strings.Contains(strings.ToLower(a), "authorization") {
-				t.Fatalf("token/header must not appear in cmd.Args: %q", a)
-			}
 		}
 	})
 
@@ -530,6 +501,48 @@ func TestEphemeralGitHubAuth_ScopedEnvNotArgs_REQ_481(t *testing.T) {
 			}
 		}
 	})
+}
+
+func assertGitHubAuthNoLeak(t *testing.T, args, env []string, probe string, idx int) {
+	t.Helper()
+	joinedArgs := strings.Join(args, "\n")
+	if strings.Contains(joinedArgs, probe) || strings.Contains(strings.ToLower(joinedArgs), "authorization") {
+		t.Fatal("token or Authorization header leaked into git argv")
+	}
+	for _, a := range args {
+		if strings.HasPrefix(a, "http.extraHeader=") || strings.Contains(a, "AUTHORIZATION:") {
+			t.Fatal("auth must not be injected via -c argv")
+		}
+	}
+	joined := strings.Join(env, "\n")
+	if strings.Contains(joined, probe) || strings.Contains(joined, "AUTHORIZATION: bearer") || strings.Contains(joined, "AUTHORIZATION: Bearer") {
+		t.Fatal("raw token or bearer header leaked into the git child environment")
+	}
+	if !strings.Contains(joined, "GIT_CONFIG_COUNT="+strconv.Itoa(idx+1)) {
+		t.Fatalf("expected GIT_CONFIG_COUNT=%d", idx+1)
+	}
+	key := "GIT_CONFIG_KEY_" + strconv.Itoa(idx) + "=http.https://github.com/.extraHeader"
+	if !strings.Contains(joined, key) {
+		t.Fatalf("missing %s", key)
+	}
+	prefix := "GIT_CONFIG_VALUE_" + strconv.Itoa(idx) + "=AUTHORIZATION: basic "
+	var encoded string
+	for _, e := range env {
+		if rest, ok := strings.CutPrefix(e, prefix); ok {
+			encoded = rest
+			break
+		}
+	}
+	if encoded == "" {
+		t.Fatal("missing basic AUTHORIZATION header")
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("basic header is not standard base64: %v", err)
+	}
+	if string(raw) != "x-access-token:"+probe {
+		t.Fatal("basic header did not decode to x-access-token plus the job token")
+	}
 }
 
 func TestNextGitConfigIndex_REQ_481(t *testing.T) {
