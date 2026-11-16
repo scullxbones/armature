@@ -22,15 +22,9 @@ func init() {
 	armerrors.Register(codePromotionStop1)
 }
 
-// issueCreator opens a GitHub issue; tests inject a fake via jidokaHooks.
+// issueCreator opens a GitHub issue. Production uses the env-backed creator;
+// tests inject via Invocation.createAndonIssue (per-command, parallel-safe).
 type issueCreator func(ctx context.Context, owner, repo, title, body string, labels []string) (externalref.CreatedIssue, error)
-
-type jidokaHooks struct {
-	create issueCreator
-}
-
-// Pointer is fixed; tests swap create under the hood, never reassign the pointer.
-var jidoka = &jidokaHooks{} //nolint:gochecknoglobals
 
 func newPromotionStopCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -184,10 +178,7 @@ func tripJidokaOnFailedRows(
 	owner, repoName := githubOwnerRepo(envFrom(cmd))
 	andonURL := ""
 	dogfood := plan.OpenDogfood
-	create := jidoka.create
-	if create == nil {
-		create = issueCreatorFromEnv(envFrom(cmd))
-	}
+	create := andonCreatorFor(cmd)
 	if plan.OpenAndon {
 		title := fmt.Sprintf("andon: promotion stop PR #%s %s %s", pr, failed.ID, step)
 		body := fmt.Sprintf("Jidoka andon (ADR 0026).\n\n- PR: %s\n- Issue ID: %s\n- Failing step: %s\n- Tree root: %s\n",
@@ -224,6 +215,13 @@ func tripJidokaOnFailedRows(
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "jidoka: armed stop on tree %s (andon=%v dogfood=%v)\n",
 		plan.TreeRoot, plan.OpenAndon, plan.OpenDogfood)
 	return nil
+}
+
+func andonCreatorFor(cmd *cobra.Command) issueCreator {
+	if sess := sessionFrom(cmd); sess != nil && sess.inv.createAndonIssue != nil {
+		return sess.inv.createAndonIssue
+	}
+	return issueCreatorFromEnv(envFrom(cmd))
 }
 
 func issueCreatorFromEnv(env Env) issueCreator {

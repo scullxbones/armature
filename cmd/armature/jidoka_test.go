@@ -42,6 +42,18 @@ func (f *fakeIssueCreates) create(_ context.Context, owner, repo, title, body st
 	}, nil
 }
 
+func runLandWithAndon(t *testing.T, stdout, stderr *bytes.Buffer, create issueCreator, args ...string) int {
+	t.Helper()
+	return Run(context.Background(), Invocation{
+		Args:             args,
+		Env:              OverlayEnv(OSEnv(), cliEnvFor(t)),
+		Stdout:           stdout,
+		Stderr:           stderr,
+		TempDir:          testTempDir(t),
+		createAndonIssue: create,
+	})
+}
+
 func TestJidokaDriftTreeStopOneAndon_REQ_482(t *testing.T) {
 	t.Parallel()
 	fx := setupLandFixture(t)
@@ -85,7 +97,6 @@ func TestJidokaDriftTreeStopOneAndon_REQ_482(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "story-01", issue.Parent)
 
-	// Drift: squash on main without assessment → missing-assessment.
 	run(t, repo, "git", "checkout", "main")
 	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--squash", issue.Tip)
 	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "commit", "-m", "feat(task-01): squash (#77)")
@@ -94,13 +105,9 @@ func TestJidokaDriftTreeStopOneAndon_REQ_482(t *testing.T) {
 	run(t, repo, "git", "branch", "-D", "task/task-01")
 
 	fake := &fakeIssueCreates{}
-	prev := jidoka.create
-	jidoka.create = fake.create
-	t.Cleanup(func() { jidoka.create = prev })
-
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	code := executeThenHandleRootError(t, stdout, stderr,
+	code := runLandWithAndon(t, stdout, stderr, fake.create,
 		"land", "--repo", repo, "--pr", "77", "--format", "agent")
 	assert.Equal(t, 1, code, "drift land must fail; out=%s err=%s", stdout.String(), stderr.String())
 	assert.Contains(t, stderr.String(), "jidoka: armed stop")
@@ -145,7 +152,6 @@ func TestJidokaDriftTreeStopOneAndon_REQ_482(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, promotion.ActiveStops(stops))
 
-	// Second same-kind failure → dogfood finding, not a second andon.
 	history, err := ops.ReadAllPromotionStops(filepath.Join(ctx.IssuesDir, "ops"))
 	require.NoError(t, err)
 	plan := promotion.PlanTrip(g, history, "task-01", promotion.KindMissingAssessment)
@@ -154,7 +160,7 @@ func TestJidokaDriftTreeStopOneAndon_REQ_482(t *testing.T) {
 
 	stdout2 := new(bytes.Buffer)
 	stderr2 := new(bytes.Buffer)
-	code = executeThenHandleRootError(t, stdout2, stderr2,
+	code = runLandWithAndon(t, stdout2, stderr2, fake.create,
 		"land", "--repo", repo, "--pr", "77", "--format", "agent")
 	assert.Equal(t, 1, code, "second drift land must still fail; out=%s err=%s", stdout2.String(), stderr2.String())
 
@@ -171,4 +177,54 @@ func TestJidokaDriftTreeStopOneAndon_REQ_482(t *testing.T) {
 	}
 	assert.Equal(t, 1, andonTitles, "exactly one andon issue across both failures")
 	fake.mu.Unlock()
+}
+
+func TestLandDryRunNeverTripsJidoka_REQ_482(t *testing.T) {
+	t.Parallel()
+	fx := setupLandFixture(t)
+	repo := fx.Dir
+
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	scopeFile := filepath.Join(wt, "cmd", "armature", "task_01.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(scopeFile), 0o755))
+	require.NoError(t, os.WriteFile(scopeFile, []byte("package armature\n"), 0o644))
+	run(t, wt, "git", "add", "cmd/armature/task_01.go")
+	run(t, wt, "git", "commit", "-m", "feat(task-01): implement")
+	_, err = runTrls(t, wt, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	// On-target without assessment → missing-assessment; dry-run must not trip.
+	run(t, repo, "git", "checkout", "main")
+	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--squash", issue.Tip)
+	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "commit", "-m", "feat(task-01): squash (#66)")
+	run(t, repo, "git", "push", "origin", issue.Tip+":refs/pull/66/head")
+
+	ctx := getTestContext(t, repo)
+	opsBefore, err := ops.ReadAllPromotionStops(filepath.Join(ctx.IssuesDir, "ops"))
+	require.NoError(t, err)
+
+	fake := &fakeIssueCreates{}
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := runLandWithAndon(t, stdout, stderr, fake.create,
+		"land", "--repo", repo, "--pr", "66", "--dry-run", "--format", "agent")
+	assert.Equal(t, 1, code, "dry-run missing-assessment still exits 1; out=%s err=%s",
+		stdout.String(), stderr.String())
+	assert.NotContains(t, stderr.String(), "jidoka: armed stop")
+
+	fake.mu.Lock()
+	assert.Empty(t, fake.calls, "dry-run must open zero GitHub issues")
+	fake.mu.Unlock()
+
+	opsAfter, err := ops.ReadAllPromotionStops(filepath.Join(ctx.IssuesDir, "ops"))
+	require.NoError(t, err)
+	assert.Equal(t, len(opsBefore), len(opsAfter), "dry-run must append zero promotion-stop ops")
+	assert.Empty(t, promotion.ActiveStops(opsAfter))
 }
