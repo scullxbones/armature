@@ -460,6 +460,36 @@ jobs:
       - name: Prove promotion-ready verify path
         run: bash scripts/promotion-ready-ci.sh
 
+  # ADR 0026 N1 (#481): hermetic arm land --pr fixture proof (post-merge
+  # Action lives in arm-land.yml). contents:read; no model/secrets.
+  arm-land-proof:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build arm binary
+        run: make build
+
+      - name: Prove arm land --pr path
+        run: bash scripts/arm-land-proof.sh
+
   govulncheck:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
