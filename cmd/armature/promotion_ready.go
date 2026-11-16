@@ -114,18 +114,16 @@ func mapPromotionReadyError(err error) error {
 		strings.Contains(msg, "--base is required"),
 		strings.Contains(msg, "--head is required"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm promotion-ready --help"}, err)
+	case strings.Contains(msg, "jidoka stop"):
+		return armerrors.Wrap(codePromotionReady1, msg, []string{
+			"arm promotion-stop clear --issue <id> --msg <root-cause>",
+			"arm doctor",
+		}, err)
 	default:
-		next := []string{
+		return armerrors.Wrap(codePromotionReady1, msg, []string{
 			"arm review prepare --issue <id> --base <sha> --head <sha>",
 			"arm review record --issue <id> --assessment <file> --bundle <file>",
 			"arm gate run full",
-		}
-		if strings.Contains(msg, "jidoka stop") {
-			next = []string{
-				"arm promotion-stop clear --issue <id> --msg <root-cause>",
-				"arm doctor",
-			}
-		}
-		return armerrors.Wrap(codePromotionReady1, msg, next, err)
+		}, err)
 	}
 }
