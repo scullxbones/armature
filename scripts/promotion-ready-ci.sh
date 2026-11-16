@@ -17,6 +17,6 @@ die() {
 
 # Unit + CLI fixture proof for ADR 0026 N1 poka-yoke (issue #480).
 cd "$ROOT"
-go test ./internal/promotion/ ./cmd/armature/ -count=1 -run 'REQ_480'
+go test ./internal/promotion/ ./cmd/armature/ ./internal/ops/ -count=1 -run 'REQ_480|REQ_482'
 
 echo "promotion-ready-ci: OK"

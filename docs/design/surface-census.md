@@ -204,8 +204,10 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |
 | `gate` | main.go, gate.go | Run configured quality-gate profiles | **kept-evidence** | Container for `gate run`. Profiles come from `.armature/config.json` `gates` map; `full` is reserved as the publish profile. |
 | `gate run` | gate.go | Execute a named gate profile and append evidence | **kept-evidence** | Subcommand of `gate`. Runs in the invoking checkout. Streams output to `.armature/gates/` and appends a `gate-evidence` op to the invoking worker log. Trees dirty before or after the command record `uncommitted` (not citable). CI sets `ci=true` under `GITHUB_ACTIONS`. |
-| `promotion-ready` | main.go, promotion_ready.go | Verify-only pre-merge poka-yoke (ADR 0026 N1) | **kept-evidence** | Flags: `--issue` (repeatable), `--base`, `--head`. Refuses empty contract / unknown scope (R4), missing CI full gate evidence at head (R2), and assessments not keyed by delivery `(base, tip)` for that head (R3). Never authors assessments. |
-| `land` | main.go, land.go | Post-merge apply for PR N (ADR 0026 N1) | **kept-evidence** | Flags: `--pr` (required), `--dry-run`. Fetches `refs/pull/N/head` (R1); applies stored done+attestation via ADR 0022 matcher; records squash SHA as `matched_commit`. Same writer path as sync/merged. |
+| `promotion-ready` | main.go, promotion_ready.go | Verify-only pre-merge poka-yoke (ADR 0026 N1) | **kept-evidence** | Flags: `--issue` (repeatable), `--base`, `--head`. Refuses empty contract / unknown scope (R4), missing CI full gate evidence at head (R2), assessments not keyed by delivery `(base, tip)` for that head (R3), and active jidoka tree stops covering a scoped ID. Never authors assessments. |
+| `promotion-stop` | main.go, jidoka.go | Jidoka tree-scoped promotion stop (ADR 0026) | **kept-evidence** | Container for `promotion-stop clear`. Land/sweep trips; clear requires root-cause note. |
+| `promotion-stop clear` | jidoka.go | Clear a jidoka stop with a root-cause note | **kept-evidence** | Flags: `--issue`, `--msg` (required). Writes note + clear op on the tree root. |
+| `land` | main.go, land.go | Post-merge apply for PR N (ADR 0026 N1) | **kept-evidence** | Flags: `--pr` (required), `--dry-run`. Fetches `refs/pull/N/head` (R1); applies stored done+attestation via ADR 0022 matcher; records squash SHA as `matched_commit`. On drift, arms tree-scoped jidoka stop + one andon issue. |
 | `tui` | main.go:259, tui.go | TUI for issue navigation | **kept-evidence** | Interactive mode. Lists and filters issues. |
 | `context-history` | main.go:263, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
 | `context-report` | main.go, context_report.go | Price fixture-measured main-path CLI payloads by bytes and estimated tokens | **kept-evidence** | Diagnostic meter. json/agent stdout for list, ready, show, render-context, and review (list/ready/show are compact AOC envelopes); plus a fixture render-context bundle. Embedded testdata. bytes/4 matches token_budget. |
@@ -245,7 +247,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--issue` | claim, transition, note, decision, amend, show, assign, unassign, promotion-ready, etc. | string | Target issue ID (positional alternative in some commands) | **kept-evidence** |
+| `--issue` | claim, transition, note, decision, amend, show, assign, unassign, promotion-ready, promotion-stop clear, etc. | string | Target issue ID (positional alternative in some commands) | **kept-evidence** |
 | `--type` | create, amend, list | string | Issue type (epic, story, feature, task, bug) | **kept-evidence** |
 | `--parent` | create, reparent, list, ready | string | Parent issue ID (or filter) | **kept-evidence** |
 | `--title` | create, sources add | string | Human-readable title | **kept-evidence** |
@@ -266,7 +268,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--worktree` | claim | string | Required worktree destination; a value-less form remains compatible and provisions .worktrees/<issue-id>, while an explicit value selects a new destination | **kept-evidence** |
 | `--from` | claim | string | Parent worktree whose current branch and tip seed an explicit new --worktree destination | **kept-evidence** |
 | `--force` | claim, merged, sources accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
-| `--msg` | note | string | Note message | **kept-evidence** |
+| `--msg` | note, promotion-stop clear | string | Note / root-cause message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
 | `--skip-delivery-gate` | transition | bool | Bypass the delivery gate (clean tree, scope containment, commit reference) checked when transitioning to done; override is recorded in the transition op's payload | **kept-evidence** |
@@ -464,6 +466,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `doctor quarantine` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Hidden leaf. N9 default: agent-facing envelope. |
 | `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `promotion-ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Verify-only; human ok line today. |
+| `promotion-stop clear` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Clear requires `--msg` root-cause. |
 | `land` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Same sync-shaped rows; `--dry-run` writes nothing. |
 | `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Protocol Output (with `mcp`). `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
 | `mcp` |  | Protocol Output | host MCP newline JSON-RPC on stdio |  | **kept-evidence** | Protocol Output (ADR 0024). Hidden. One tool `arm`. `MarkProtocolOutput` is the exemption. |

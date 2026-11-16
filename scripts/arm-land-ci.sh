@@ -24,7 +24,7 @@ land_one() {
 
 if [[ "${ARM_LAND_PROOF_ONLY:-}" == "1" ]]; then
 	cd "$ROOT"
-	go test ./cmd/armature/ ./internal/adapters/ -count=1 -run 'REQ_481'
+	go test ./cmd/armature/ ./internal/adapters/ ./internal/promotion/ ./internal/ops/ ./internal/externalref/ -count=1 -run 'REQ_481|REQ_482'
 	echo "arm-land-ci: proof OK"
 	exit 0
 fi

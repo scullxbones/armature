@@ -931,8 +931,9 @@ func (c *Client) withPublishDeadline() *Client {
 // process-group cancel, and WaitDelay. Pass the remote by name so
 // remote.<name>.* applies inside the clone; do not -c remote.<name>.url=
 // (git appends a value and does not override). When GITHUB_TOKEN is set and
-// origin is https://github.com/…, auth is injected for that command only via
-// GIT_CONFIG_COUNT / KEY / VALUE (Git ≥2.31; never -c, never .git/config).
+// origin is https://github.com/…, auth is appended for that command only via
+// GIT_CONFIG_COUNT / KEY_N / VALUE_N at the next free index (Git ≥2.31;
+// never -c, never .git/config; never overwrite inherited GIT_CONFIG_*).
 // Caller must defer cancel().
 func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.effectiveNetworkTimeout())
@@ -942,10 +943,11 @@ func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.Context, context
 	return cmd, ctx, cancel
 }
 
-// applyEphemeralGitHubHTTPAuth sets GIT_CONFIG_* on cmd so git sees a
+// applyEphemeralGitHubHTTPAuth appends GIT_CONFIG_* on cmd so git sees a
 // host-scoped http.extraHeader for github.com only. Non-GitHub HTTPS origins
 // get no header. The token never appears in cmd.Args and is not written to
-// .git/config.
+// .git/config. Inherited GIT_CONFIG_KEY_N / VALUE_N entries are preserved:
+// COUNT is read and the auth pair is written at the next free index.
 func (c *Client) applyEphemeralGitHubHTTPAuth(cmd *exec.Cmd) {
 	if cmd == nil {
 		return
@@ -970,13 +972,29 @@ func (c *Client) applyEphemeralGitHubHTTPAuth(cmd *exec.Cmd) {
 	} else {
 		env = append([]string(nil), env...)
 	}
-	env = stripEnvKeys(env, "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0")
+	idx := nextGitConfigIndex(env)
+	env = stripEnvKeys(env, "GIT_CONFIG_COUNT")
 	env = append(env,
-		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0="+key,
-		"GIT_CONFIG_VALUE_0="+val,
+		"GIT_CONFIG_COUNT="+strconv.Itoa(idx+1),
+		"GIT_CONFIG_KEY_"+strconv.Itoa(idx)+"="+key,
+		"GIT_CONFIG_VALUE_"+strconv.Itoa(idx)+"="+val,
 	)
 	cmd.Env = env
+}
+
+// nextGitConfigIndex returns the next free GIT_CONFIG_* slot from environ's
+// GIT_CONFIG_COUNT (0 when unset/invalid). Callers append KEY_N/VALUE_N at
+// that index and set COUNT to index+1 so inherited entries survive.
+func nextGitConfigIndex(environ []string) int {
+	raw := strings.TrimSpace(envValFold(environ, "GIT_CONFIG_COUNT"))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 func httpsGitHubHost(raw string) (string, bool) {

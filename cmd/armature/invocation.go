@@ -119,6 +119,9 @@ type Invocation struct {
 
 	replayLeases          func([]ops.Op) map[string]claim.Lease
 	afterIdempotencyCheck func()
+	// createAndonIssue is a test hook for jidoka andon/dogfood creates.
+	// Nil uses the env-backed GitHub creator. Per-invocation — never a package global.
+	createAndonIssue issueCreator
 }
 
 type session struct {
