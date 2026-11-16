@@ -3,7 +3,7 @@
 #
 # Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload, schema_version]
 #
-# Position 0: op_type (string) - one of: create, claim, heartbeat, transition, note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign, external-ref, amend, citation-accepted, scope-rename, scope-delete, reparent, assessment-attested, promotion-check, gate-evidence, log-quarantine
+# Position 0: op_type (string) - one of: create, claim, heartbeat, transition, note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign, external-ref, amend, citation-accepted, scope-rename, scope-delete, reparent, assessment-attested, promotion-check, gate-evidence, promotion-stop, log-quarantine
 # Position 1: target_id (string) - issue/node/source ID this op targets
 # Position 2: timestamp (integer) - Unix epoch seconds
 # Position 3: worker_id (string) - UUID of the worker emitting this op
@@ -45,6 +45,7 @@
 #   reparent:          parent
 #   assessment-attested: assessment
 #   promotion-check:   target_sha, tip, result, combined_patch_id, matched_commit
-#   gate-evidence:     profile, command, head_sha, start, end, exit, uncommitted,
+#   gate-evidence:     profile, command, head_sha, start, end, exit, uncommitted, ci,
 #                     output_hash, output_head, output_tail, log_path
+#   promotion-stop:    action, pr, issue_id, tree_root, step, kind, andon_url, note_id, dogfood, at
 #   log-quarantine:    quarantine_log, quarantine_line, sha
