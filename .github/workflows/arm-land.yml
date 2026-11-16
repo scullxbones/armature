@@ -62,19 +62,28 @@ jobs:
           # Host-scoped GitHub auth via GIT_CONFIG_* (Git ≥2.31). Never -c with
           # the token (visible in ps/argv) and never write remote URL / .git/config.
           # Append at the next free index so inherited GIT_CONFIG_* survive.
-          # Pass GIT_CONFIG_* only on this git fetch (inline env) so the token
-          # never lands in exported shell state / -x traces.
+          # Export under set +x (not env argv / prefix assignment) so the token
+          # never appears as an argv element or in -x traces; restore -x only
+          # if it was on.
           count="${GIT_CONFIG_COUNT:-0}"
           case "$count" in
             ''|*[!0-9]*) count=0 ;;
           esac
           idx="$count"
           next=$((count + 1))
-          env \
-            "GIT_CONFIG_COUNT=${next}" \
-            "GIT_CONFIG_KEY_${idx}=http.https://github.com/.extraHeader" \
-            "GIT_CONFIG_VALUE_${idx}=AUTHORIZATION: bearer ${GITHUB_TOKEN}" \
-            git fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
+          xtrace_was_on=0
+          case "$-" in
+            *x*) xtrace_was_on=1 ;;
+          esac
+          set +x
+          export GIT_CONFIG_COUNT="${next}"
+          export "GIT_CONFIG_KEY_${idx}=http.https://github.com/.extraHeader"
+          export "GIT_CONFIG_VALUE_${idx}=AUTHORIZATION: bearer ${GITHUB_TOKEN}"
+          git fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
+          unset GIT_CONFIG_COUNT
+          unset "GIT_CONFIG_KEY_${idx}"
+          unset "GIT_CONFIG_VALUE_${idx}"
+          if [ "$xtrace_was_on" -eq 1 ]; then set -x; fi
 
       - name: Attach ops worktree and register CI worker
         run: |
