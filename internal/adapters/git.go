@@ -173,7 +173,7 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	)
 	cmd.Env = env
 	if len(args) > 0 && args[0] == "commit" {
-		c.applyActionsBotIdentity(cmd)
+		c.applyActionsBotIdentity(ctx, cmd)
 	}
 	return cmd
 }
@@ -181,11 +181,11 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 // applyActionsBotIdentity supplies the GitHub Actions bot author only when
 // this process is Actions and git has no author ident. A configured name
 // or GIT_AUTHOR_* is left alone, and nothing is written to git config.
-func (c *Client) applyActionsBotIdentity(cmd *exec.Cmd) {
+func (c *Client) applyActionsBotIdentity(ctx context.Context, cmd *exec.Cmd) {
 	if c == nil || cmd == nil || !strings.EqualFold(strings.TrimSpace(envValFold(cmd.Env, "GITHUB_ACTIONS")), "true") {
 		return
 	}
-	if identFromEnv(cmd.Env) || c.authorIdentConfigured() {
+	if identFromEnv(cmd.Env) || c.authorIdentConfigured(ctx) {
 		return
 	}
 	cmd.Env = stripEnvKeys(cmd.Env, "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL")
@@ -202,8 +202,8 @@ func identFromEnv(env []string) bool {
 		strings.TrimSpace(envValFold(env, "GIT_AUTHOR_EMAIL")) != ""
 }
 
-func (c *Client) authorIdentConfigured() bool {
-	out, err := c.cmd("var", "GIT_AUTHOR_IDENT").Output()
+func (c *Client) authorIdentConfigured(ctx context.Context) bool {
+	out, err := c.cmdContext(ctx, "var", "GIT_AUTHOR_IDENT").Output()
 	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 

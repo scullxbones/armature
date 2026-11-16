@@ -31,7 +31,7 @@ func TestCommitPathsNoVerify_ActionsBotWhenIdentMissing_REQ_481(t *testing.T) {
 	if cn, ce := commitCommitter(t, dir, env); cn != name || ce != email {
 		t.Fatalf("committer = %q <%s>", cn, ce)
 	}
-	cfg := exec.Command("git", "-C", dir, "config", "--local", "--get", "user.name")
+	cfg := exec.CommandContext(t.Context(), "git", "-C", dir, "config", "--local", "--get", "user.name")
 	cfg.Env = env
 	if out, cfgErr := cfg.CombinedOutput(); cfgErr == nil {
 		t.Fatalf("bot identity must not be written to repo config, got %q", strings.TrimSpace(string(out)))
@@ -109,7 +109,7 @@ func identityFreeEnv(t *testing.T) []string {
 
 func gitWithEnv(t *testing.T, dir string, env []string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -129,7 +129,7 @@ func commitCommitter(t *testing.T, dir string, env []string) (string, string) {
 
 func commitIdent(t *testing.T, dir string, env []string, nameFmt, emailFmt string) (string, string) {
 	t.Helper()
-	cmd := exec.Command("git", "-C", dir, "log", "-1", "--format="+nameFmt+"%x00"+emailFmt)
+	cmd := exec.CommandContext(t.Context(), "git", "-C", dir, "log", "-1", "--format="+nameFmt+"%x00"+emailFmt)
 	cmd.Env = env
 	out, err := cmd.Output()
 	if err != nil {

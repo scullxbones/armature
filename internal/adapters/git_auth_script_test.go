@@ -14,7 +14,7 @@ func TestGitHubActionsAuthScript_NoTokenLeak_REQ_481(t *testing.T) {
 	probe := "ghs_SCRIPT_PROBE_481!"
 	script := filepath.Join(moduleRoot(t), "scripts", "github-actions-git-auth.sh")
 
-	trace := exec.Command("bash", "-x", "-c", `source "$1"; github_actions_git_auth_export`, "bash", script)
+	trace := exec.CommandContext(t.Context(), "bash", "-x", "-c", `source "$1"; github_actions_git_auth_export`, "bash", script)
 	trace.Env = append(os.Environ(), "GITHUB_TOKEN="+probe)
 	traced, err := trace.CombinedOutput()
 	if err != nil {
@@ -24,7 +24,7 @@ func TestGitHubActionsAuthScript_NoTokenLeak_REQ_481(t *testing.T) {
 		t.Fatal("token leaked into bash -x trace")
 	}
 
-	show := exec.Command("bash", "-c", `
+	show := exec.CommandContext(t.Context(), "bash", "-c", `
 set -euo pipefail
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=user.name

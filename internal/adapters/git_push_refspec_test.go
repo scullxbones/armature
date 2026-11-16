@@ -26,7 +26,7 @@ func TestPushRefspecPublishesProofRefOnly_REQ_481(t *testing.T) {
 	if remoteProof != tip {
 		t.Fatalf("proof ref = %s, local _armature = %s", remoteProof, tip)
 	}
-	if _, err := gitOutputErr(fx.Origin, "rev-parse", "refs/heads/_armature"); err == nil {
+	if _, err := gitOutputErr(t, fx.Origin, "rev-parse", "refs/heads/_armature"); err == nil {
 		t.Fatal("origin/_armature was created by the proof push")
 	}
 	if err := adapters.New(fx.Dir).Push("-main"); err == nil {
@@ -36,15 +36,16 @@ func TestPushRefspecPublishesProofRefOnly_REQ_481(t *testing.T) {
 
 func gitOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	out, err := gitOutputErr(dir, args...)
+	out, err := gitOutputErr(t, dir, args...)
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return out
 }
 
-func gitOutputErr(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+func gitOutputErr(t *testing.T, dir string, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
