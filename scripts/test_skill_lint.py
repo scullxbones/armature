@@ -8,11 +8,19 @@ cmd/armature/skill_lint_test.go that run the whole script against a built
 binary.
 """
 
-import unittest
+import re
+import subprocess
+import sys
 import tempfile
+import unittest
 from pathlib import Path
 
-from skill_lint import (
+# `python -m unittest scripts/test_skill_lint.py` puts the repo root on
+# sys.path, not scripts/.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from skill_lint import (  # noqa: E402
+    _VERIFY_UNPINNED_GIT_LINE_RE,
     extract_arm_commands,
     extract_flags,
     find_lint_files,
@@ -26,6 +34,18 @@ from skill_lint import (
     strip_redirects,
     tokenize_shell_line,
     validate_command,
+)
+
+# Historical unpinned-git pattern (bare value was \S+). Legitimate lines must
+# still classify the same way. The pieces are concatenated with + so this
+# file does not contain another re.compile literal of the py/redos expression
+# (adjacent string literals would be one constant). Do not match the CodeQL
+# witness with it: 22 repetitions of `"" A=` took ~1.0s locally.
+_LEGACY_UNPINNED_GIT_LINE_RE = re.compile(
+    r"^\s*(?:env(?:\s+[A-Za-z_][\w]*=(?:\"[^\"]*\"|'[^']*'|"
+    + "\\S+"
+    + r"))+\s+)?"
+    + r"(?:capture\s+\S+\s+)?git (?!-C\b)(?!--git-dir(?:\s|=))(?!init\b)"
 )
 
 
@@ -441,6 +461,90 @@ class TestVerifyArmaturePinning(unittest.TestCase):
             ),
             [],
         )
+
+    def test_legacy_and_current_agree_on_legitimate_git_lines(self):
+        # (line, matches unpinned git). Pinned -C / --git-dir / init stay
+        # allowed. Env-prefixed and capture-prefixed lines stay flagged when
+        # the git invocation itself is unpinned.
+        cases = (
+            ("env FOO=bar git config user.name", True),
+            ('env FOO="bar baz" git push origin', True),
+            ("env FOO='bar baz' git remote -v", True),
+            ("env FOO=bar BAZ=qux git worktree list", True),
+            ('env A="" git config x', True),
+            ("env A='' git config x", True),
+            ('env FOO="a b" BAR=\'c\' git remote -v', True),
+            ("env FOO=bar capture label git update-ref HEAD", True),
+            ('  env PATH="$PATH" git for-each-ref', True),
+            ("capture drive/x git config --get x", True),
+            ("  git config user.name", True),
+            ("git push origin _armature", True),
+            ("git worktree list", True),
+            ("git rev-parse HEAD", True),
+            ('capture drive/01 git -C "$TARGET" config --get x', False),
+            ('capture drive/05d-remote git -C "$TARGET_REPO" remote add origin "$origin"', False),
+            ('git -C "$TARGET" config user.name', False),
+            ('git -C"$TARGET" config user.name', False),
+            ('git --git-dir "$origin" rev-parse HEAD', False),
+            ('git --git-dir="$origin" rev-parse HEAD', False),
+            ('git init -q --bare "$origin"', False),
+            ('git init -q "$TARGET"', False),
+            ('git --git-dir "$origin" init', False),
+            ('env FOO=bar git -C "$T" config x', False),
+            ('env FOO=bar git --git-dir="$o" rev-parse', False),
+            ('env FOO=bar git --git-dir "$o" rev-parse', False),
+            ('env FOO=bar git init -q "$T"', False),
+            ("echo git config", False),
+            ("# git config x", False),
+            (
+                'capture drive/00-seed-commit env "PATH=$(dirname -- "$ARM_BIN"):$PATH" '
+                'git -C "$TARGET_REPO" commit -q -m "docs: seed"',
+                False,
+            ),
+        )
+        for line, want in cases:
+            legacy = _LEGACY_UNPINNED_GIT_LINE_RE.match(line) is not None
+            current = _VERIFY_UNPINNED_GIT_LINE_RE.match(line) is not None
+            self.assertEqual(legacy, want, f"legacy: {line}")
+            self.assertEqual(current, want, f"current: {line}")
+            self.assertEqual(legacy, current, line)
+
+    def test_codeql_redos_witness_finishes_under_bound(self):
+        # CodeQL py/redos witness: `env A=` plus many `"" A=`.
+        # 30 reps of the legacy pattern is exponential; the current pattern
+        # must reject it (no git verb) well inside this bound.
+        root = Path(__file__).resolve().parents[1]
+        witness_reps = 30
+        script = r"""
+import importlib.util
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+reps = int(sys.argv[2])
+spec = importlib.util.spec_from_file_location(
+    "skill_lint_under_test", root / "scripts" / "skill_lint.py"
+)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+line = "env A=" + ('"" A=' * reps)
+if mod._VERIFY_UNPINNED_GIT_LINE_RE.match(line) is not None:
+    sys.exit("witness matched; expected no unpinned git")
+"""
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-c", script, str(root), str(witness_reps)],
+                timeout=2.0,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail(
+                f"py/redos witness ({witness_reps} reps) exceeded 2s; "
+                "bare-value alternative still overlaps quotes"
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
 
     def test_find_verify_armature_script_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

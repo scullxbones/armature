@@ -359,6 +359,7 @@ validate-doc-examples:
 	@go run ./cmd/armature validate doc-examples --repo .
 
 skill-lint: build
+	@$(PYTHON) -m unittest scripts/test_skill_lint.py
 	@ARM_BIN=$(ARM_BIN) $(PYTHON) scripts/skill_lint.py .
 
 census-drift-check:

@@ -650,8 +650,11 @@ _VERIFY_UNPINNED_GIT_BACKTICK_RE = re.compile(
     rf"`git (?!-C\b)(?:{_VERIFY_TARGET_GIT_ALT})\b[^`]*`"
 )
 # Fenced / script lines: optional env PREFIX=val and/or `capture <label>` before git.
+# Bare values exclude quotes. \S+ also matches " and ', so it overlaps the
+# quoted alternatives and Python backtracks exponentially on CodeQL's
+# py/redos witness (`env A=` followed by repeats of `"" A=`).
 _VERIFY_UNPINNED_GIT_LINE_RE = re.compile(
-    rf"^\s*(?:env(?:\s+[A-Za-z_][\w]*=(?:\"[^\"]*\"|'[^']*'|\S+))+\s+)?"
+    rf"^\s*(?:env(?:\s+[A-Za-z_][\w]*=(?:\"[^\"]*\"|'[^']*'|[^\s\"']+))+\s+)?"
     rf"(?:capture\s+\S+\s+)?git (?!-C\b)(?!--git-dir(?:\s|=))(?!init\b)"
 )
 # Drive/teardown arm invocations in fences must carry --repo. `version` is the
