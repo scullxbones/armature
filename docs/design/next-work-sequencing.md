@@ -14,7 +14,7 @@ The 2026-11-15 ops audit still stands for closeout, and it is not a theme. `arm 
 
 v0.1.0 is shipped. Item 24 including doctor **D13** is **on `main`** (PR #444). Item 28a and item 28b are **on `main`** (see the S11 archive). Do not invent a release number until a cut task is filed after Phase 4.
 
-**Phase 0 — truth.** N1 promotion from the host, then the skills diet. The diet depends on N1. N1's design (R1–R4, the pre-merge `promotion-ready` check, the post-merge Action, jidoka) is decided in ADR 0026 and is not built yet. Skills diet: remove coordinator, activity-indexer, and auditor from default bootstrap into an opt-in pack; keep reviewer; rewrite worker for cloud agents.
+**Phase 0 — truth.** N1 promotion from the host, then the skills diet. The diet depends on N1. N1 (R1–R4, pre-merge `promotion-ready`, post-merge Action, jidoka, fixture proof + settings checklist) is on `main` via #480–#483; operator settings remain human-owned (`docs/agents/n1-host-settings.md`). Skills diet: remove coordinator, activity-indexer, and auditor from default bootstrap into an opt-in pack; keep reviewer; rewrite worker for cloud agents.
 
 **Phase 1 — speed.** Workstream 4, materialization speed. This replaces item 44. Target 10–100 ms. Today: warm ~956 ms, cold ~5.2 s, `render-context` ~5.8 s. The cost is git subprocesses and blob re-reads.
 
@@ -36,7 +36,7 @@ Story cells that said **not yet decomposed** on 2026-11-15 were checked on `orig
 
 | Phase | Rank | Item | Source | Armature story |
 |---|---|---|---|---|
-| 0 | 1 | N1 promotion from the host | ADR 0026 | not yet decomposed. Design is the ADR. Item 24 T4 is done (#444) |
+| 0 | 1 | N1 promotion from the host | ADR 0026 | **on `main`** (#480–#483). Operator settings checklist: `docs/agents/n1-host-settings.md`. Item 24 T4 is done (#444) |
 | 0 | 5 | Skills diet | ADR 0026 skills audit | not yet decomposed. Depends on N1 |
 | 1 | 4 | Materialization speed | replaces item 44 / LH C2 | not yet decomposed. Target 10–100 ms |
 | 2 | 2 | Harness contract, five harnesses | item 28 / Next-Ten №08 | not yet decomposed. 28a and 28b are delivered |

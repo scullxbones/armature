@@ -473,8 +473,10 @@ func TestDoctorD11_AgeGitInvocationsBounded_REQ_TOPTIER_S12_T2(t *testing.T) {
 	assert.Equal(t, smallCalls, largeCalls,
 		"git exec count must be independent of unpublished commit count (got %d for 40, %d for 200)",
 		smallCalls, largeCalls)
-	// fetch + rev-parse tip + rev-list --count + log --format=%ct + delete-ref
-	assert.LessOrEqual(t, largeCalls, 8, "D11 probe must stay a small constant git budget")
+	// Staging-lock probes (origin URL + common-dir) + origin URL again for
+	// networkCmd, fetch, rev-parse tip, rev-list --count, log --format=%ct,
+	// DeleteRef (rev-parse + update-ref -d). Bound stays a small constant.
+	assert.LessOrEqual(t, largeCalls, 10, "D11 probe must stay a small constant git budget")
 	assert.GreaterOrEqual(t, largeCalls, 4)
 }
 
