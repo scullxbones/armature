@@ -2484,6 +2484,29 @@ func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
 	require.Error(t, c.FetchBranchToRef("_armature", ""))
 }
 
+func TestFetchPullHead_R1_REQ_481(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, fx.Dir, "checkout", "-b", "delivery")
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "feat: tip")
+	tip := runGitOutput(t, fx.Dir, "rev-parse", "HEAD")
+	gittest.Git(t, fx.Dir, "push", "origin", "HEAD:refs/pull/42/head")
+	gittest.Git(t, fx.Dir, "checkout", "main")
+
+	fresh := t.TempDir()
+	gittest.Git(t, "", "clone", fx.Origin, fresh)
+	c := adapters.New(fresh)
+	got, err := c.FetchPullHead("42")
+	require.NoError(t, err)
+	assert.Equal(t, tip, got)
+
+	_, err = c.FetchPullHead("")
+	require.Error(t, err)
+	_, err = c.FetchPullHead("not-a-number")
+	require.Error(t, err)
+}
+
 func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
