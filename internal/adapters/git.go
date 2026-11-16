@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/gitoid"
+	"github.com/scullxbones/armature/internal/redact"
 )
 
 type Client struct {
@@ -778,7 +779,7 @@ func (c *Client) Push(branch string) error {
 	out, err := cmd.CombinedOutput()
 	out, err = networkResult(ctx, out, err)
 	if err != nil {
-		return fmt.Errorf("git push origin %s: %w\n%s", branch, err, out)
+		return safeNetworkErr(err, "git push origin %s: %v\n%s", branch, err, out)
 	}
 	return nil
 }
@@ -789,7 +790,7 @@ func (c *Client) FetchAndRebase(branch string) error {
 	out, err := fetch.CombinedOutput()
 	out, err = networkResult(ctx, out, err)
 	if err != nil {
-		return fmt.Errorf("git fetch origin: %w\n%s", err, out)
+		return safeNetworkErr(err, "git fetch origin: %v\n%s", err, out)
 	}
 	rebase := c.cmd("rebase", "origin/"+branch)
 	out, err = rebase.CombinedOutput()
@@ -797,6 +798,23 @@ func (c *Client) FetchAndRebase(branch string) error {
 		return fmt.Errorf("git rebase origin/%s: %w\n%s", branch, err, out)
 	}
 	return nil
+}
+
+// safeNetworkErr redacts credential-bearing text in Error() while preserving
+// Unwrap so callers can still errors.Is / errors.As the cause (e.g. deadline).
+type safeNetworkErrValue struct {
+	safe  string
+	cause error
+}
+
+func (e safeNetworkErrValue) Error() string { return e.safe }
+func (e safeNetworkErrValue) Unwrap() error { return e.cause }
+
+func safeNetworkErr(cause error, format string, args ...any) error {
+	return safeNetworkErrValue{
+		safe:  redact.Secrets(fmt.Sprintf(format, args...)),
+		cause: cause,
+	}
 }
 
 // ErrRemoteRefMissing reports that origin was reachable but the requested
@@ -887,9 +905,13 @@ func (c *Client) fetchOriginRefSpec(spec, label string) error {
 		out, fetchErr := cmd.CombinedOutput()
 		out, fetchErr = networkResult(ctx, out, fetchErr)
 		if fetchErr != nil {
-			wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", label, remoteURL, fetchErr, out)
-			if remoteRefMissingText(string(out)) || remoteRefMissingText(fetchErr.Error()) {
-				return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
+			outStr := string(out)
+			missing := remoteRefMissingText(outStr) || remoteRefMissingText(fetchErr.Error())
+			// Redact Error() text; keep unwrap to fetchErr for classifiers.
+			wrapped := safeNetworkErr(fetchErr,
+				"git fetch origin %s (first-url %s): %v\n%s", label, remoteURL, fetchErr, outStr)
+			if missing {
+				return fmt.Errorf("%w: %w", ErrRemoteRefMissing, wrapped)
 			}
 			return wrapped
 		}
@@ -910,12 +932,42 @@ func (c *Client) withPublishDeadline() *Client {
 // pull, clone, and probes of a named remote). It applies the deadline,
 // process-group cancel, and WaitDelay. Pass the remote by name so
 // remote.<name>.* applies inside the clone; do not -c remote.<name>.url=
-// (git appends a value and does not override). Caller must defer cancel().
+// (git appends a value and does not override). When GITHUB_TOKEN is set and
+// origin is https, auth is injected per-command via -c http.extraHeader
+// (never persisted to git config / remote URL). Caller must defer cancel().
 func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.effectiveNetworkTimeout())
-	cmd := c.cmdContext(ctx, args...)
+	cmd := c.cmdContext(ctx, c.withEphemeralHTTPAuth(args)...)
 	configureNetworkCmd(cmd)
 	return cmd, ctx, cancel
+}
+
+// withEphemeralHTTPAuth prepends a per-process -c http.extraHeader when
+// GITHUB_TOKEN is present and origin uses https. The header is not written to
+// git config; remote URLs stay token-free.
+func (c *Client) withEphemeralHTTPAuth(args []string) []string {
+	token := c.githubToken()
+	if token == "" {
+		return args
+	}
+	remoteURL, err := c.firstRemoteURL("origin")
+	if err != nil || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(remoteURL)), "https://") {
+		return args
+	}
+	header := "http.extraHeader=AUTHORIZATION: bearer " + token
+	out := make([]string, 0, len(args)+2)
+	out = append(out, "-c", header)
+	return append(out, args...)
+}
+
+func (c *Client) githubToken() string {
+	if c != nil && len(c.environ) > 0 {
+		if v := strings.TrimSpace(envValFold(c.environ, "GITHUB_TOKEN")); v != "" {
+			return v
+		}
+	}
+	// forbidigo bans os.Getenv; fold over os.Environ like other adapter env reads.
+	return strings.TrimSpace(envValFold(os.Environ(), "GITHUB_TOKEN"))
 }
 
 // networkResult keeps a deadline visible when process-group kill turns it into
@@ -1988,7 +2040,9 @@ func (c *Client) RestoreEvidence(
 
 	_, exists, lsErr := c.lsRemoteRef("origin", remoteRef)
 	if lsErr != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: ls-remote origin %s (first-url %s) failed (fail-closed): %w", remoteRef, remoteURL, lsErr)
+		return false, "", "", false, false, safeNetworkErr(lsErr,
+			"restore evidence: ls-remote origin %s (first-url %s) failed (fail-closed): %v",
+			remoteRef, remoteURL, lsErr)
 	}
 
 	absBundle, absErr := filepath.Abs(bundlePath)
@@ -2024,8 +2078,8 @@ func (c *Client) RestoreEvidence(
 	out, fetchErr := cmd.CombinedOutput()
 	out, fetchErr = networkResult(ctx, out, fetchErr)
 	if fetchErr != nil {
-		return false, "", "", false, false, fmt.Errorf(
-			"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
+		return false, "", "", false, false, safeNetworkErr(fetchErr,
+			"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %v\n%s",
 			remoteRef, remoteURL, fetchErr, out)
 	}
 	originTip, err = c.ResolveRevision(originTmp)
@@ -2060,7 +2114,7 @@ func (c *Client) lsRemoteRef(name, ref string) (sha string, exists bool, err err
 	out, runErr := cmd.CombinedOutput()
 	out, runErr = networkResult(ctx, out, runErr)
 	if runErr != nil {
-		return "", false, fmt.Errorf("git ls-remote %s %s: %w\n%s", name, ref, runErr, out)
+		return "", false, safeNetworkErr(runErr, "git ls-remote %s %s: %v\n%s", name, ref, runErr, out)
 	}
 	sha, exists, err = exactRefFromPatternOutput(string(out), ref)
 	if err != nil {

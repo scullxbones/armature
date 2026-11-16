@@ -179,3 +179,57 @@ func TestFetchPullHead_R1_REQ_481(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, tip, got)
 }
+
+func TestLandPR_LeavesOriginURLTokenFree_REQ_481(t *testing.T) {
+	// GITHUB_TOKEN must auth via ephemeral networkCmd header, never remote URL.
+	probe := "ghs_" + "LAND_ORIGIN_PROBE_481"
+	t.Setenv("GITHUB_TOKEN", probe)
+
+	fx := setupLandFixture(t)
+	repo := fx.Dir
+	beforeURL := originRemoteURL(t, repo)
+	require.NotContains(t, beforeURL, probe)
+	require.NotContains(t, beforeURL, "x-access-token")
+
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	scopeFile := filepath.Join(wt, "cmd", "armature", "task_01.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(scopeFile), 0o755))
+	require.NoError(t, os.WriteFile(scopeFile, []byte("package armature\n"), 0o644))
+	run(t, wt, "git", "add", "cmd/armature/task_01.go")
+	run(t, wt, "git", "commit", "-m", "feat(task-01): implement")
+	_, err = runTrls(t, wt, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	attestDeliveryForTest(t, repo, "task-01", issue.Base, issue.Tip)
+
+	run(t, repo, "git", "checkout", "main")
+	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--squash", issue.Tip)
+	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "commit", "-m", "feat(task-01): squash (#88)")
+	run(t, repo, "git", "push", "origin", issue.Tip+":refs/pull/88/head")
+	run(t, repo, "git", "worktree", "remove", "--force", wt)
+	run(t, repo, "git", "branch", "-D", "task/task-01")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"land", "--repo", repo, "--pr", "88", "--format", "agent")
+	assert.Equal(t, 0, code, "out=%s", stdout.String())
+
+	afterURL := originRemoteURL(t, repo)
+	assert.Equal(t, beforeURL, afterURL, "arm land must not rewrite remote.origin.url")
+	assert.NotContains(t, afterURL, probe)
+	assert.NotContains(t, afterURL, "x-access-token")
+}
+
+func originRemoteURL(t *testing.T, repo string) string {
+	t.Helper()
+	cmd := adapters.NonInteractiveGitCommand(repo, "config", "--get", "remote.origin.url")
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out))
+}
