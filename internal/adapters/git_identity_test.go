@@ -8,13 +8,14 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/gittest"
 )
 
 func TestCommitPathsNoVerify_ActionsBotWhenIdentMissing_REQ_481(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir := gittest.InitRepo(t)
 	env := append(identityFreeEnv(t), "GITHUB_ACTIONS=true")
-	gitWithEnv(t, dir, env, "init", "-b", "main")
+	unsetLocalIdent(t, dir, env)
 	if err := os.WriteFile(filepath.Join(dir, "SCHEMA"), []byte("schema\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -40,9 +41,9 @@ func TestCommitPathsNoVerify_ActionsBotWhenIdentMissing_REQ_481(t *testing.T) {
 
 func TestCommitPathsNoVerify_KeepsConfiguredIdentOnActions_REQ_481(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir := gittest.InitRepo(t)
 	env := append(identityFreeEnv(t), "GITHUB_ACTIONS=true")
-	gitWithEnv(t, dir, env, "init", "-b", "main")
+	unsetLocalIdent(t, dir, env)
 	gitWithEnv(t, dir, env, "config", "user.name", "Ada Lovelace")
 	gitWithEnv(t, dir, env, "config", "user.email", "ada@example.com")
 	if err := os.WriteFile(filepath.Join(dir, "SCHEMA"), []byte("schema\n"), 0o644); err != nil {
@@ -61,9 +62,9 @@ func TestCommitPathsNoVerify_KeepsConfiguredIdentOnActions_REQ_481(t *testing.T)
 
 func TestCommitPathsNoVerify_MissingIdentOutsideActions_REQ_481(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir := gittest.InitRepo(t)
 	env := identityFreeEnv(t)
-	gitWithEnv(t, dir, env, "init", "-b", "main")
+	unsetLocalIdent(t, dir, env)
 	if err := os.WriteFile(filepath.Join(dir, "SCHEMA"), []byte("schema\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +74,12 @@ func TestCommitPathsNoVerify_MissingIdentOutsideActions_REQ_481(t *testing.T) {
 	if err == nil || !identityRejected(err.Error()) {
 		t.Fatalf("expected missing-ident failure outside Actions, got %v", err)
 	}
+}
+
+func unsetLocalIdent(t *testing.T, dir string, env []string) {
+	t.Helper()
+	gitWithEnv(t, dir, env, "config", "--local", "--unset", "user.name")
+	gitWithEnv(t, dir, env, "config", "--local", "--unset", "user.email")
 }
 
 func identityRejected(msg string) bool {
