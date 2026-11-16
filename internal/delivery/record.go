@@ -34,14 +34,13 @@ type Request struct {
 	WorktreePath      string
 }
 
-// validationError is a snapshot validation failure (DELIVERY-1 at the CLI port).
-// Callers classify it with IsRecordError.
-type validationError struct {
+// recordError is a snapshot validation failure (DELIVERY-1 at the CLI port).
+type recordError struct {
 	kind string
 	msg  string
 }
 
-func (e *validationError) Error() string {
+func (e *recordError) Error() string {
 	if e == nil {
 		return ""
 	}
@@ -93,34 +92,34 @@ func Record(git *adapters.Client, req Request) (snapshot, error) {
 // ancestors the tip, sitting on recorded branch/claim provenance.
 func validate(git *adapters.Client, req Request) (snapshot, error) {
 	if req.IssueID == "" {
-		return snapshot{}, recordError("usage", "issue ID is required")
+		return snapshot{}, newRecordError("usage", "issue ID is required")
 	}
 	if strings.TrimSpace(req.Base) == "" || strings.TrimSpace(req.Tip) == "" {
-		return snapshot{}, recordError("usage", "base and tip are required")
+		return snapshot{}, newRecordError("usage", "base and tip are required")
 	}
 
 	base, baseErr := git.ResolveRevision(req.Base)
 	tip, tipErr := git.ResolveRevision(req.Tip)
 	if baseErr != nil || tipErr != nil {
-		return snapshot{}, recordError("missing-objects", "delivery base or tip does not resolve to an existing object")
+		return snapshot{}, newRecordError("missing-objects", "delivery base or tip does not resolve to an existing object")
 	}
 
 	ancestor, err := git.IsAncestor(base, tip)
 	if err != nil {
-		return snapshot{}, recordError("missing-objects", "delivery base or tip does not resolve to an existing object")
+		return snapshot{}, newRecordError("missing-objects", "delivery base or tip does not resolve to an existing object")
 	}
 	if !ancestor {
-		return snapshot{}, recordError("not-ancestor", "delivery base is not an ancestor of tip")
+		return snapshot{}, newRecordError("not-ancestor", "delivery base is not an ancestor of tip")
 	}
 	if base == tip {
-		return snapshot{}, recordError("empty-range", "delivery range is empty: base and tip are the same commit")
+		return snapshot{}, newRecordError("empty-range", "delivery range is empty: base and tip are the same commit")
 	}
 	changed, err := git.DiffNameOnlyRange(base, tip)
 	if err != nil {
 		return snapshot{}, fmt.Errorf("diff delivery range: %w", err)
 	}
 	if len(changed) == 0 {
-		return snapshot{}, recordError("empty-range", "delivery range is empty: base..tip has no diff")
+		return snapshot{}, newRecordError("empty-range", "delivery range is empty: base..tip has no diff")
 	}
 
 	if err := checkWorktreeHEAD(git, req.WorktreePath, tip); err != nil {
@@ -201,7 +200,7 @@ func resolveBase(git *adapters.Client, worktreePath, tip, branch, integrationBra
 	}
 	base, err := git.MergeBase(tip, integrationBranch)
 	if err != nil {
-		return "", recordError("missing-objects", fmt.Sprintf("merge-base with integration branch %s: %v", integrationBranch, err))
+		return "", newRecordError("missing-objects", fmt.Sprintf("merge-base with integration branch %s: %v", integrationBranch, err))
 	}
 	return base, nil
 }
@@ -212,10 +211,10 @@ func checkWorktreeHEAD(git *adapters.Client, worktreePath, tip string) error {
 	}
 	head, err := git.HeadSHA()
 	if err != nil {
-		return recordError("head-unreadable", "bound worktree HEAD is unreadable")
+		return newRecordError("head-unreadable", "bound worktree HEAD is unreadable")
 	}
 	if head != tip {
-		return recordError("head-disagree", "worktree HEAD disagrees with delivery tip")
+		return newRecordError("head-disagree", "worktree HEAD disagrees with delivery tip")
 	}
 	return nil
 }
@@ -245,7 +244,7 @@ func checkProvenance(git *adapters.Client, req Request, tip, branch string) erro
 		if req.IssueType != "" && materialize.DeriveBranchName(req.IssueType, req.IssueID) == "" && branch == "" {
 			return nil
 		}
-		return recordError("no-provenance", "no recorded branch or claim provenance for this issue")
+		return newRecordError("no-provenance", "no recorded branch or claim provenance for this issue")
 	}
 
 	if claimedTip != "" {
@@ -261,11 +260,11 @@ func checkProvenance(git *adapters.Client, req Request, tip, branch string) erro
 			return nil
 		}
 	}
-	return recordError("unrelated-range", "delivery tip is not on recorded branch or claim provenance")
+	return newRecordError("unrelated-range", "delivery tip is not on recorded branch or claim provenance")
 }
 
-func recordError(kind, msg string) error {
-	return &validationError{kind: kind, msg: msg}
+func newRecordError(kind, msg string) error {
+	return &recordError{kind: kind, msg: msg}
 }
 
 func resolveClaimedBranchTip(git *adapters.Client, req Request, branch string) string {
@@ -290,6 +289,6 @@ func resolveClaimedBranchTip(git *adapters.Client, req Request, branch string) s
 
 // IsRecordError reports whether err is a delivery snapshot validation failure.
 func IsRecordError(err error) bool {
-	var rec *validationError
+	var rec *recordError
 	return errors.As(err, &rec)
 }

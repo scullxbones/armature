@@ -66,7 +66,7 @@ func TestValidateRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.True(t, IsRecordError(err))
-	var rec *validationError
+	var rec *recordError
 	require.ErrorAs(t, err, &rec)
 	assert.Equal(t, "missing-objects", rec.kind)
 }
@@ -86,7 +86,7 @@ func TestValidateRejectsEmptyRange(t *testing.T) {
 		Branch:    "task/rec-empty",
 	})
 	require.Error(t, err)
-	var rec *validationError
+	var rec *recordError
 	require.ErrorAs(t, err, &rec)
 	assert.Equal(t, "empty-range", rec.kind)
 }
@@ -110,7 +110,7 @@ func TestValidateRejectsUnrelatedTip(t *testing.T) {
 		Branch:    "task/rec-unrel",
 	})
 	require.Error(t, err, "claimed tip is %s", claimed)
-	var rec *validationError
+	var rec *recordError
 	require.ErrorAs(t, err, &rec)
 	assert.Equal(t, "unrelated-range", rec.kind)
 }
@@ -142,7 +142,7 @@ func TestValidateRejectsUnknownIssueWithoutProvenance_REQ_LNGHZN_S11_T1(t *testi
 		Tip:       tip,
 	})
 	require.Error(t, err, "unknown issue with empty type must not get a provenance exemption")
-	var rec *validationError
+	var rec *recordError
 	require.ErrorAs(t, err, &rec)
 	assert.Equal(t, "no-provenance", rec.kind)
 
@@ -178,7 +178,7 @@ func TestValidateRejectsUnreadableBoundWorktreeHEAD_REQ_LNGHZN_S11_T1(t *testing
 		WorktreePath: repo,
 	})
 	require.Error(t, err, "bound worktree with unreadable HEAD must fail closed")
-	var rec *validationError
+	var rec *recordError
 	require.ErrorAs(t, err, &rec)
 	assert.Equal(t, "head-unreadable", rec.kind)
 }
