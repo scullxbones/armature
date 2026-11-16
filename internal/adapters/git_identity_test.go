@@ -80,6 +80,9 @@ func unsetLocalIdent(t *testing.T, dir string, env []string) {
 	t.Helper()
 	gitWithEnv(t, dir, env, "config", "--local", "--unset", "user.name")
 	gitWithEnv(t, dir, env, "config", "--local", "--unset", "user.email")
+	// macOS runners have a gecos name (for example "Anka"). Without this,
+	// git commits as that user and the missing-ident case never fails.
+	gitWithEnv(t, dir, env, "config", "--local", "user.useConfigOnly", "true")
 }
 
 func identityRejected(msg string) bool {
