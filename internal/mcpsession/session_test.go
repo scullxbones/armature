@@ -435,6 +435,55 @@ func TestServeSignalGraceWithoutSecondSignal_REQ_MCPSTDIO_S1(t *testing.T) {
 	require.NoError(t, pw.Close())
 }
 
+// TestReadLinesFinalEOFCtxDone_REQ_coverage_determinism locks session.go's
+// post-Scan select arm `case <-ctx.Done(): return` (cover block ~215).
+// Under Serve, live is buffered(1): when ctx is already cancelled and the
+// EOF send still fits the buffer, Go's select picks randomly between Done
+// and send — that single statement flipped internal coverage 86.08%↔86.09%
+// locally and drove ~0.15pp quote-gate misses on identical Go trees
+// (#490/#493: body 86.22–86.23% vs check-core 86.07–86.08%). Unbuffered
+// out + pre-cancelled ctx makes only Done ready, so the arm always counts.
+func TestReadLinesFinalEOFCtxDone_REQ_coverage_determinism(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	out := make(chan lineEvent) // unbuffered; no receiver → send never ready
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		readLines(ctx, strings.NewReader(""), out)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLines did not return on cancelled ctx after empty Scan")
+	}
+	_, ok := <-out
+	assert.False(t, ok, "out must close after ctx.Done return")
+}
+
+// TestReadLinesScanLineCtxDone_REQ_coverage_determinism locks the in-loop
+// select arm `case <-ctx.Done(): return` after a successful Scan (~205).
+// Same unbuffered+pre-cancel setup: Done is the only ready case.
+func TestReadLinesScanLineCtxDone_REQ_coverage_determinism(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	out := make(chan lineEvent)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		readLines(ctx, strings.NewReader("line-one\n"), out)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLines did not return on cancelled ctx after Scan")
+	}
+	_, ok := <-out
+	assert.False(t, ok, "out must close after in-loop ctx.Done return")
+}
+
 func TestServeWriterFailureIsWireBroken_REQ_MCPSTDIO_S1(t *testing.T) {
 	t.Parallel()
 	in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}` + "\n")
