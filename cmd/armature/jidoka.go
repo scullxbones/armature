@@ -22,10 +22,15 @@ func init() {
 	armerrors.Register(codePromotionStop1)
 }
 
-// issueCreator opens a GitHub issue; tests inject a fake.
+// issueCreator opens a GitHub issue; tests inject a fake via jidokaHooks.
 type issueCreator func(ctx context.Context, owner, repo, title, body string, labels []string) (externalref.CreatedIssue, error)
 
-var jidokaCreateIssue issueCreator
+type jidokaHooks struct {
+	create issueCreator
+}
+
+// Pointer is fixed; tests swap create under the hood, never reassign the pointer.
+var jidoka = &jidokaHooks{} //nolint:gochecknoglobals
 
 func newPromotionStopCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -109,6 +114,7 @@ func runPromotionStopClear(cmd *cobra.Command, issueID, msg string) error {
 		Step:     stop.Step,
 		Kind:     stop.Kind,
 		NoteID:   noteID,
+		At:       nowEpoch(),
 	}); err != nil {
 		return err
 	}
@@ -178,7 +184,7 @@ func tripJidokaOnFailedRows(
 	owner, repoName := githubOwnerRepo(envFrom(cmd))
 	andonURL := ""
 	dogfood := plan.OpenDogfood
-	create := jidokaCreateIssue
+	create := jidoka.create
 	if create == nil {
 		create = issueCreatorFromEnv(envFrom(cmd))
 	}
@@ -211,6 +217,7 @@ func tripJidokaOnFailedRows(
 		Kind:     kind,
 		AndonURL: andonURL,
 		Dogfood:  dogfood,
+		At:       nowEpoch(),
 	}); err != nil {
 		return err
 	}

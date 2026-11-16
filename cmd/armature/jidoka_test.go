@@ -94,9 +94,9 @@ func TestJidokaDriftTreeStopOneAndon_REQ_482(t *testing.T) {
 	run(t, repo, "git", "branch", "-D", "task/task-01")
 
 	fake := &fakeIssueCreates{}
-	prev := jidokaCreateIssue
-	jidokaCreateIssue = fake.create
-	t.Cleanup(func() { jidokaCreateIssue = prev })
+	prev := jidoka.create
+	jidoka.create = fake.create
+	t.Cleanup(func() { jidoka.create = prev })
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

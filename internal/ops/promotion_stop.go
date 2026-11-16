@@ -3,7 +3,6 @@ package ops
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 )
@@ -42,7 +41,7 @@ func AppendPromotionStop(logPath, workerID string, stop PromotionStop) error {
 		return fmt.Errorf("promotion-stop: tree_root is required")
 	}
 	if stop.At == 0 {
-		stop.At = time.Now().Unix()
+		return fmt.Errorf("promotion-stop: at is required")
 	}
 	payload, err := json.Marshal(stop)
 	if err != nil {
