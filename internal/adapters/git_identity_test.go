@@ -102,6 +102,7 @@ func identityFreeEnv(t *testing.T) []string {
 		"GIT_CONFIG_GLOBAL":   true,
 		"GIT_CONFIG_SYSTEM":   true,
 		"EMAIL":               true,
+		"GITHUB_ACTIONS":      true,
 	}
 	out := make([]string, 0, len(os.Environ())+2)
 	for _, e := range os.Environ() {
