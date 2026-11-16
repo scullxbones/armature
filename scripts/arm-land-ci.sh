@@ -22,7 +22,6 @@ land_one() {
 	"$ARM_BIN" land --pr "$pr"
 }
 
-# Unit/fixture proof when invoked without a host event (local / check job).
 if [[ "${ARM_LAND_PROOF_ONLY:-}" == "1" ]]; then
 	cd "$ROOT"
 	go test ./cmd/armature/ ./internal/adapters/ -count=1 -run 'REQ_481'
