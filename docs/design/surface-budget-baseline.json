@@ -550,7 +550,7 @@
       ]
     },
     "internal/delivery": {
-      "count": 29,
+      "count": 17,
       "names": [
         "ComputeFromWorktree",
         "IsRecordError",
@@ -560,12 +560,7 @@
         "Record",
         "RecordArgv",
         "RecordArgvFilled",
-        "RecordError",
-        "RecordError.Error",
-        "RecordError.Kind",
-        "RecordError.Msg",
         "RefName",
-        "RefPrefix",
         "Request",
         "Request.Base",
         "Request.Branch",
@@ -573,14 +568,7 @@
         "Request.IssueID",
         "Request.IssueType",
         "Request.Tip",
-        "Request.WorktreePath",
-        "Snapshot",
-        "Snapshot.Base",
-        "Snapshot.Branch",
-        "Snapshot.IntegrationBranch",
-        "Snapshot.IssueID",
-        "Snapshot.Tip",
-        "Validate"
+        "Request.WorktreePath"
       ]
     },
     "internal/deliverygate": {
