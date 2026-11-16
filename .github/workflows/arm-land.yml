@@ -1,0 +1,94 @@
+# ADR 0026 N1 (#481): post-merge apply via `arm land --pr` + scheduled sweep.
+# One writer (concurrency group). FF-only `_armature` via `arm push-ops`.
+# Workflow token only — no new secrets. Token never written into git config /
+# remote URL; networkCmd injects Authorization per-command from GITHUB_TOKEN.
+name: Arm land
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    # Idempotent sweep for merged PRs whose scoped IDs are not yet merged.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to land (empty = sweep recent merged PRs)"
+        required: false
+        type: string
+
+concurrency:
+  group: armature-land
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.26.11"
+
+jobs:
+  land:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build arm binary
+        run: make build
+
+      - name: Fetch ops branch tip (ephemeral header auth)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Host-scoped GitHub auth via GIT_CONFIG_* (Git ≥2.31). Never -c with
+          # the token (visible in ps/argv) and never write remote URL / .git/config.
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0='http.https://github.com/.extraHeader'
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"
+          git fetch --no-tags origin "+refs/heads/_armature:refs/remotes/origin/_armature" || true
+
+      - name: Attach ops worktree and register CI worker
+        run: |
+          ./bin/arm bootstrap
+          ./bin/arm worker-init --check || ./bin/arm worker-init
+
+      - name: Land merged PR or sweep
+        id: land
+        # Sweep may fail some PRs while others wrote ops; still publish below.
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+        run: bash scripts/arm-land-ci.sh
+
+      - name: Publish ops (FF-only via arm push-ops)
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./bin/arm push-ops
+
+      - name: Fail job if land failed
+        if: ${{ steps.land.outcome == 'failure' }}
+        run: |
+          echo "arm-land: land step failed after push-ops attempt" >&2
+          exit 1

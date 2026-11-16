@@ -205,6 +205,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `gate` | main.go, gate.go | Run configured quality-gate profiles | **kept-evidence** | Container for `gate run`. Profiles come from `.armature/config.json` `gates` map; `full` is reserved as the publish profile. |
 | `gate run` | gate.go | Execute a named gate profile and append evidence | **kept-evidence** | Subcommand of `gate`. Runs in the invoking checkout. Streams output to `.armature/gates/` and appends a `gate-evidence` op to the invoking worker log. Trees dirty before or after the command record `uncommitted` (not citable). CI sets `ci=true` under `GITHUB_ACTIONS`. |
 | `promotion-ready` | main.go, promotion_ready.go | Verify-only pre-merge poka-yoke (ADR 0026 N1) | **kept-evidence** | Flags: `--issue` (repeatable), `--base`, `--head`. Refuses empty contract / unknown scope (R4), missing CI full gate evidence at head (R2), and assessments not keyed by delivery `(base, tip)` for that head (R3). Never authors assessments. |
+| `land` | main.go, land.go | Post-merge apply for PR N (ADR 0026 N1) | **kept-evidence** | Flags: `--pr` (required), `--dry-run`. Fetches `refs/pull/N/head` (R1); applies stored done+attestation via ADR 0022 matcher; records squash SHA as `matched_commit`. Same writer path as sync/merged. |
 | `tui` | main.go:259, tui.go | TUI for issue navigation | **kept-evidence** | Interactive mode. Lists and filters issues. |
 | `context-history` | main.go:263, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
 | `context-report` | main.go, context_report.go | Price fixture-measured main-path CLI payloads by bytes and estimated tokens | **kept-evidence** | Diagnostic meter. json/agent stdout for list, ready, show, render-context, and review (list/ready/show are compact AOC envelopes); plus a fixture render-context bundle. Embedded testdata. bytes/4 matches token_budget. |
@@ -273,7 +274,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--reason` | dag override-release, push-ops, link, unlink | string | Recorded reason for a Release Override, a publish-validate override, or a graph-edit override. Required with the matching override flag. | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
-| `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
+| `--pr` | transition, merged, land | string | PR number or URL | **kept-evidence** |
 | `--base` | transition, delivery record, promotion-ready | string | Delivery base SHA for the ADR 0022 snapshot (distinct from review prepare `--base`) | **kept-evidence** |
 | `--tip` | transition, delivery record | string | Delivery tip SHA for the ADR 0022 snapshot | **kept-evidence** |
 | `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
@@ -288,7 +289,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--dry-run` | sync, dag apply, dag revert, import, doctor, worktree gc | bool | Preview without writing ops (for `worktree gc`, preview removals without removing) | **kept-evidence** |
+| `--dry-run` | sync, land, dag apply, dag revert, import, doctor, worktree gc | bool | Preview without writing ops (for `worktree gc`, preview removals without removing) | **kept-evidence** |
 | `--into` | sync | string | Override integration branch for every leaf (default: recorded per issue, else config) | **kept-evidence** |
 | `--override-validate` | push-ops, link, unlink | bool | Human escape hatch: publish `_armature` even when `arm validate --ci` would fail, or write a link/unlink that introduces Graph Findings. Requires `--reason` and a controlling terminal. Records `skipped_validate_gate`. Never green. Skills must not name this flag. | **kept-evidence** |
 
@@ -463,6 +464,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `doctor quarantine` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Hidden leaf. N9 default: agent-facing envelope. |
 | `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `promotion-ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Verify-only; human ok line today. |
+| `land` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Same sync-shaped rows; `--dry-run` writes nothing. |
 | `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Protocol Output (with `mcp`). `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
 | `mcp` |  | Protocol Output | host MCP newline JSON-RPC on stdio |  | **kept-evidence** | Protocol Output (ADR 0024). Hidden. One tool `arm`. `MarkProtocolOutput` is the exemption. |
 | `heartbeat` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
@@ -520,9 +522,9 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - **Confidence States**: 3 (all kept-evidence)
 - **Issue Fields**: 41 (37 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 20 (all kept-evidence)
-- **CLI Commands**: 59 (all kept-evidence, 4 groups)
+- **CLI Commands**: 60 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
-- **Command output modes**: 69 (63 agent-facing, 4 Artifact Output, 2 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
+- **Command output modes**: 70 (64 agent-facing, 4 Artifact Output, 2 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 
