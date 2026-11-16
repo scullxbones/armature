@@ -570,7 +570,7 @@ Run a repository-configured quality-gate profile and record wrapper-observed evi
 
 ### gate run
 
-Execute the command declared for `<profile>` in the blob at `HEAD:gates.json` of the invoking checkout (`--repo` or the current directory — not the parent repo `ResolveContext` walks to, not the ops worktree, not `.armature/config.json`, and not the worktree file, which skip-worktree can hide). Stream stdout/stderr to a log file under `.armature/gates/`, and append a `gate-evidence` op to the invoking worker's own log (`profile`, `command`, `head_sha`, `start`, `end`, `exit`, `output_hash`, `output_head`, `output_tail`, `log_path`). Profile name `full` is reserved as the publish profile. A working tree that is dirty before the command, or that the command dirties, still executes but records the run as `uncommitted` (not citable). Repos with no `HEAD:gates.json` (or an empty map) get a clear error — armature does not infer make or Go. A porcelain `!!` path is exempt only when `git check-ignore -v --no-index` names a source that is a tracked file at HEAD (typically a committed `.gitignore`). `.git/info/exclude`, `core.excludesFile`, and XDG/global gitignore never appear in `Delivery.Diff` and mark the run `uncommitted`. The dirty check recurses into populated submodules with `--ignore-submodules=none --untracked-files=all`. A gitlink directory that has files but no `.git` is dirty. skip-worktree and assume-unchanged (`git ls-files -v` tags `S` or lowercase) are walked in the superproject and populated submodules. The gate git client pins `--work-tree` / `--git-dir` from the filesystem `.git` so `GIT_WORK_TREE`, `GIT_DIR`, and `core.worktree` cannot point the check at a clean export.
+Execute the command declared for `<profile>` in the blob at `HEAD:gates.json` of the invoking checkout (`--repo` or the current directory — not the parent repo `ResolveContext` walks to, not the ops worktree, not `.armature/config.json`, and not the worktree file, which skip-worktree can hide). Stream stdout/stderr to a log file under `.armature/gates/`, and append a `gate-evidence` op to the invoking worker's own log (`profile`, `command`, `head_sha`, `start`, `end`, `exit`, `uncommitted`, `ci`, `output_hash`, `output_head`, `output_tail`, `log_path`). Profile name `full` is reserved as the publish profile. A working tree that is dirty before the command, or that the command dirties, still executes but records the run as `uncommitted` (not citable). When `GITHUB_ACTIONS=true`, the op records `ci=true` so promotion-ready can require CI-only evidence (ADR 0026). Repos with no `HEAD:gates.json` (or an empty map) get a clear error — armature does not infer make or Go. A porcelain `!!` path is exempt only when `git check-ignore -v --no-index` names a source that is a tracked file at HEAD (typically a committed `.gitignore`). `.git/info/exclude`, `core.excludesFile`, and XDG/global gitignore never appear in `Delivery.Diff` and mark the run `uncommitted`. The dirty check recurses into populated submodules with `--ignore-submodules=none --untracked-files=all`. A gitlink directory that has files but no `.git` is dirty. skip-worktree and assume-unchanged (`git ls-files -v` tags `S` or lowercase) are walked in the superproject and populated submodules. The gate git client pins `--work-tree` / `--git-dir` from the filesystem `.git` so `GIT_WORK_TREE`, `GIT_DIR`, and `core.worktree` cannot point the check at a clean export.
 
 **Synopsis:**
 `arm gate run <profile>`
@@ -579,6 +579,30 @@ Execute the command declared for `<profile>` in the blob at `HEAD:gates.json` of
 ```bash
 arm gate run full
 arm gate run fast
+```
+
+---
+
+## promotion-ready
+
+Verify-only pre-merge poka-yoke for ID-scoped deliveries (ADR 0026 N1). Does not author assessments and does not call a model.
+
+**Synopsis:**
+`arm promotion-ready --issue <id> [--issue <id> ...] --base <sha> --head <sha>`
+
+**Flags:**
+- `--issue stringArray`: Issue ID to verify (repeatable; required).
+- `--base string`: Delivery base SHA (required).
+- `--head string`: Delivery tip / current head SHA (required).
+
+**Behavior:**
+- (R4) Unknown scope IDs and empty contracts (missing/blank DoD or empty acceptance) fail.
+- (R2) Requires citable `profile=full` gate evidence recorded in CI (`ci=true`) at `--head`.
+- (R3) Requires a valid assessment attestation keyed by delivery `(base, tip)` matching `--base`/`--head`. One assessment for a shared delivery covers several leaves.
+
+**Example:**
+```bash
+arm promotion-ready --issue task-01 --base "$BASE" --head "$HEAD"
 ```
 
 ---

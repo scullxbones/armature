@@ -1071,7 +1071,7 @@
       ]
     },
     "internal/ops": {
-      "count": 210,
+      "count": 212,
       "names": [
         "AffectsValidity",
         "AppendAndCommit",
@@ -1107,6 +1107,7 @@
         "EncodeWorktree",
         "ExtractOps",
         "GateEvidence",
+        "GateEvidence.CI",
         "GateEvidence.Citable",
         "GateEvidence.Command",
         "GateEvidence.End",
@@ -1117,6 +1118,7 @@
         "GateEvidence.OutputHead",
         "GateEvidence.OutputTail",
         "GateEvidence.Profile",
+        "GateEvidence.PromotionReadyEvidence",
         "GateEvidence.Start",
         "GateEvidence.Uncommitted",
         "GenerateOpsGitignore",
@@ -1510,7 +1512,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 91,
+      "count": 102,
       "names": [
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1519,6 +1521,7 @@
         "AssessmentFact",
         "AssessmentFact.BaseSHA",
         "AssessmentFact.HeadSHA",
+        "CheckReady",
         "Error",
         "Error.Base",
         "Error.Error",
@@ -1583,6 +1586,16 @@
         "PlanOpts.Decide",
         "PlanOpts.Now",
         "PlanOpts.Viewer",
+        "ReadyInput",
+        "ReadyInput.BaseSHA",
+        "ReadyInput.GateEvidence",
+        "ReadyInput.HeadSHA",
+        "ReadyInput.IssueIDs",
+        "ReadyInput.Issues",
+        "ReadyIssue",
+        "ReadyIssue.Acceptance",
+        "ReadyIssue.Assessments",
+        "ReadyIssue.DefinitionOfDone",
         "RemediationsPlanOpts",
         "RenderGroupedNextActions",
         "Result",
