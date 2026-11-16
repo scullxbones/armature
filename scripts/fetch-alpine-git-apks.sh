@@ -32,7 +32,7 @@ cp "$SUMS" "$DEST/SHA256SUMS"
     fn="${line##*  }"
     fn="${fn##* }"
     if [ ! -f "$fn" ]; then
-      curl -fsSL -o "$fn" "$BASE_URL/$fn"
+      curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o "$fn" "$BASE_URL/$fn"
     fi
   done <SHA256SUMS
   # Verify only data lines (sha256sum -c ignores comments? — filter).
