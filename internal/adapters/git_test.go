@@ -2780,9 +2780,15 @@ exec "$real_git" "$@"
 	assert.Less(t, elapsed, 3*time.Second, "stalled remote must fail-closed near timeout+WaitDelay")
 }
 
-func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic.Int64) {
+// countingHTTPProxy listens on 127.0.0.1 and counts Accepts. When answer is true
+// it returns HTTP 503 so git fail-closes after the dial; when false it blackholes
+// (Accept + discard). Each Accept signals on accepted so honor proofs wait on that
+// channel (and hit growth) instead of asserting after a wall-clock network deadline
+// — the residual macOS race that survived #463's answering-proxy change (#462).
+func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic.Int64, accepted <-chan struct{}) {
 	t.Helper()
 	hits = &atomic.Int64{}
+	ch := make(chan struct{}, 64)
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() }) //nolint:errcheck // best-effort listener cleanup
@@ -2793,6 +2799,10 @@ func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic
 				return
 			}
 			hits.Add(1)
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
 			go func(c net.Conn) {
 				defer swallowClose(c)
 				if !answer {
@@ -2809,7 +2819,36 @@ func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic
 			}(conn)
 		}
 	}()
-	return "http://" + ln.Addr().String(), hits
+	return "http://" + ln.Addr().String(), hits, ch
+}
+
+// awaitProxyHitGrowth runs op and requires hits to rise above the pre-call baseline,
+// woken by accepted. Honor proofs use this instead of checking hits after a short
+// WithNetworkTimeout returns (cancel-before-dial under macOS CI load).
+func awaitProxyHitGrowth(t *testing.T, hits *atomic.Int64, accepted <-chan struct{}, op func() error) error {
+	t.Helper()
+	baseline := hits.Load()
+	done := make(chan error, 1)
+	go func() { done <- op() }()
+	for hits.Load() <= baseline {
+		select {
+		case <-accepted:
+		case err := <-done:
+			require.Greater(t, hits.Load(), baseline,
+				"operation returned before proxy Accept (err=%v)", err)
+			return err
+		case <-t.Context().Done():
+			require.Fail(t, "test canceled before proxy Accept")
+			return t.Context().Err()
+		}
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-t.Context().Done():
+		require.Fail(t, "test canceled waiting for operation after proxy Accept")
+		return t.Context().Err()
+	}
 }
 
 func proxyProofRepo(t *testing.T, proxyURL string) (repo, tip string) {
@@ -2828,7 +2867,7 @@ func proxyProofRepo(t *testing.T, proxyURL string) (repo, tip string) {
 
 func TestRemoteOriginProxyProof_BlackholeMissesTightDeadline_REQ_462(t *testing.T) {
 	t.Parallel()
-	proxyURL, hits := countingHTTPProxy(t, false)
+	proxyURL, hits, _ := countingHTTPProxy(t, false)
 	repo, tip := proxyProofRepo(t, proxyURL)
 	c := adapters.New(repo).WithNetworkTimeout(time.Nanosecond)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
@@ -2840,16 +2879,20 @@ func TestRemoteOriginProxyProof_BlackholeMissesTightDeadline_REQ_462(t *testing.
 
 func TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462(t *testing.T) {
 	t.Parallel()
-	proxyURL, hits := countingHTTPProxy(t, true)
+	proxyURL, hits, accepted := countingHTTPProxy(t, true)
 	repo, tip := proxyProofRepo(t, proxyURL)
-	c := adapters.New(repo).WithNetworkTimeout(500 * time.Millisecond)
+	// Default probe budget: a short WithNetworkTimeout is the cancel-before-dial
+	// race under macOS load. 503 fail-closes after Accept without that window.
+	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
 	start := time.Now()
-	_, _, _, _, _, restoreErr := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	restoreErr := awaitProxyHitGrowth(t, hits, accepted, func() error {
+		_, _, _, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+		return err
+	})
 	elapsed := time.Since(start)
 	require.Error(t, restoreErr)
-	assert.Greater(t, hits.Load(), int64(0), "answering proxy must record the dial")
 	assert.Less(t, elapsed, 2*time.Second, "503 must fail-closed without waiting out a blackhole hang")
 }
 
@@ -2857,24 +2900,27 @@ func TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462(
 func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 
-	proxyURL, hits := countingHTTPProxy(t, true)
+	proxyURL, hits, accepted := countingHTTPProxy(t, true)
 	repo, tip := proxyProofRepo(t, proxyURL)
 
-	c := adapters.New(repo).WithNetworkTimeout(500 * time.Millisecond)
+	// Honor proof waits on Accept signal; do not couple to a short network deadline.
+	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
 
 	// restore-plan network probes must dial the proxy (name path). URL path would
 	// DNS-fail proxied.invalid without touching the listener.
-	_, _, _, _, _, restoreErr := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	restoreErr := awaitProxyHitGrowth(t, hits, accepted, func() error {
+		_, _, _, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+		return err
+	})
 	require.Error(t, restoreErr, "proxied.invalid via answering 503 proxy must fail-closed")
-	assert.Greater(t, hits.Load(), int64(0), "remote.origin.proxy must be used (name-addressed remote)")
 
 	// FetchBranchToRef is the same class (snapshot refresh).
-	hits.Store(0)
-	fetchErr := c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proxyproof")
+	fetchErr := awaitProxyHitGrowth(t, hits, accepted, func() error {
+		return c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proxyproof")
+	})
 	require.Error(t, fetchErr)
-	assert.Greater(t, hits.Load(), int64(0), "FetchBranchToRef must honor remote.origin.proxy")
 }
 
 // TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G: kill -9 leaves
