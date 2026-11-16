@@ -521,9 +521,6 @@ func TestHTTPSGitHubHost_REQ_481(t *testing.T) {
 	}
 }
 
-// seedRepoOriginURL writes a minimal .git so firstRemoteURL can read origin
-// without calling GitInit* (adapters cannot import gittest; hermetic forbids
-// GitInit in package adapters tests).
 func seedRepoOriginURL(t *testing.T, originURL string) string {
 	t.Helper()
 	repo := t.TempDir()

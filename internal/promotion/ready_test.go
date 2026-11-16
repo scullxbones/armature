@@ -122,8 +122,7 @@ func TestCheckReady_SharedDiffOneAssessmentSeveralLeaves_REQ_480(t *testing.T) {
 			"leaf-b": {
 				DefinitionOfDone: "b done",
 				Acceptance:       json.RawMessage(`["b"]`),
-				// one assessment keyed by delivery covers both leaves
-				Assessments: []promotion.AssessmentFact{{BaseSHA: base, HeadSHA: tip}},
+				Assessments:      []promotion.AssessmentFact{{BaseSHA: base, HeadSHA: tip}},
 			},
 		},
 		IssueIDs:     []string{"leaf-a", "leaf-b"},

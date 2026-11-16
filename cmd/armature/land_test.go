@@ -181,7 +181,6 @@ func TestFetchPullHead_R1_REQ_481(t *testing.T) {
 }
 
 func TestLandPR_LeavesOriginURLTokenFree_REQ_481(t *testing.T) {
-	// GITHUB_TOKEN must auth via ephemeral networkCmd header, never remote URL.
 	probe := "ghs_" + "LAND_ORIGIN_PROBE_481"
 	t.Setenv("GITHUB_TOKEN", probe)
 

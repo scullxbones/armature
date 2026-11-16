@@ -431,7 +431,6 @@ jobs:
         run: bash scripts/quickstart_check.sh
 
   # ADR 0026 N1 poka-yoke (#480): verify-only promotion-ready check name.
-  # contents:read is enough; no model and no extra secrets.
   promotion-ready:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
@@ -461,7 +460,7 @@ jobs:
         run: bash scripts/promotion-ready-ci.sh
 
   # ADR 0026 N1 (#481): hermetic arm land --pr fixture proof (post-merge
-  # Action lives in arm-land.yml). contents:read; no model/secrets.
+  # Action lives in arm-land.yml).
   arm-land-proof:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest

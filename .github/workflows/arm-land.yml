@@ -1,5 +1,4 @@
 # ADR 0026 N1 (#481): post-merge apply via `arm land --pr` + scheduled sweep.
-# One writer (concurrency group). FF-only `_armature` via `arm push-ops`.
 # Workflow token only — no new secrets. Token never written into git config /
 # remote URL; networkCmd injects Authorization per-command from GITHUB_TOKEN.
 name: Arm land
@@ -73,7 +72,6 @@ jobs:
 
       - name: Land merged PR or sweep
         id: land
-        # Sweep may fail some PRs while others wrote ops; still publish below.
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

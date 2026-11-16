@@ -801,8 +801,6 @@ func (c *Client) FetchAndRebase(branch string) error {
 	return nil
 }
 
-// safeNetworkErr redacts credential-bearing text in Error() while preserving
-// Unwrap so callers can still errors.Is / errors.As the cause (e.g. deadline).
 type safeNetworkErrValue struct {
 	safe  string
 	cause error
@@ -908,7 +906,6 @@ func (c *Client) fetchOriginRefSpec(spec, label string) error {
 		if fetchErr != nil {
 			outStr := string(out)
 			missing := remoteRefMissingText(outStr) || remoteRefMissingText(fetchErr.Error())
-			// Redact Error() text; keep unwrap to fetchErr for classifiers.
 			wrapped := safeNetworkErr(fetchErr,
 				"git fetch origin %s (first-url %s): %v\n%s", label, remoteURL, fetchErr, outStr)
 			if missing {
@@ -1021,7 +1018,6 @@ func (c *Client) githubToken() string {
 			return v
 		}
 	}
-	// forbidigo bans os.Getenv; fold over os.Environ like other adapter env reads.
 	return strings.TrimSpace(envValFold(os.Environ(), "GITHUB_TOKEN"))
 }
 

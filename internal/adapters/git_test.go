@@ -2524,7 +2524,6 @@ func TestFetchPullHead_ErrorRedactsToken_REQ_481(t *testing.T) {
 }
 
 func TestNetworkCmd_GitHubTokenNotPersisted_REQ_481(t *testing.T) {
-	// GIT_CONFIG_* auth must not land in git config / remote URL / argv.
 	probe := "ghs_" + "PERSIST_PROBE_481_TOKEN"
 	t.Setenv("GITHUB_TOKEN", probe)
 	fx := gittest.InitWithOrigin(t)
@@ -2538,7 +2537,6 @@ func TestNetworkCmd_GitHubTokenNotPersisted_REQ_481(t *testing.T) {
 	require.Equal(t, cleanURL, beforeURL)
 
 	c := adapters.New(fx.Dir).WithNetworkTimeout(5 * time.Second)
-	// Missing pull ref → network error path; auth must still be ephemeral.
 	_, fetchErr := c.FetchPullHead("404")
 	require.Error(t, fetchErr)
 
@@ -2547,7 +2545,6 @@ func TestNetworkCmd_GitHubTokenNotPersisted_REQ_481(t *testing.T) {
 	assert.NotContains(t, afterURL, probe)
 	assert.NotContains(t, afterURL, "x-access-token")
 
-	// Local http.*.extraHeader must stay empty after the authenticated fetch.
 	extra, err := adapters.NonInteractiveGitCommand(fx.Dir, "config", "--local", "--get-regexp", `^http\..*\.extraheader$`).CombinedOutput()
 	if err == nil {
 		t.Fatalf("http.*.extraHeader must be unset locally after fetch, got %q", strings.TrimSpace(string(extra)))
@@ -2883,8 +2880,6 @@ func TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462(
 	t.Parallel()
 	proxyURL, hits, accepted := countingHTTPProxy(t, true)
 	repo, tip := proxyProofRepo(t, proxyURL)
-	// Default probe budget: a short WithNetworkTimeout is the cancel-before-dial
-	// race under macOS load. 503 fail-closes after Accept without that window.
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
@@ -2905,7 +2900,6 @@ func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.
 	proxyURL, hits, accepted := countingHTTPProxy(t, true)
 	repo, tip := proxyProofRepo(t, proxyURL)
 
-	// Honor proof waits on Accept signal; do not couple to a short network deadline.
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
