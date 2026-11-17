@@ -160,14 +160,14 @@ func runPromotionScope(cmd *cobra.Command, head, boundary, boundaryRef string) e
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}
-	issues := make([]promotion.ScopeIssue, 0, len(snap.Issues))
+	issues := make([]scopeIssue, 0, len(snap.Issues))
 	for id, issuePtr := range snap.Issues {
 		if issuePtr == nil {
 			continue
 		}
 		issue := *issuePtr
 		facts := promotionIssueFacts(issue)
-		issues = append(issues, promotion.ScopeIssue{
+		issues = append(issues, scopeIssue{
 			ID:          id,
 			Status:      issue.Status,
 			Base:        issue.Base,
@@ -176,7 +176,7 @@ func runPromotionScope(cmd *cobra.Command, head, boundary, boundaryRef string) e
 			Assessments: facts.AssessmentAttestations,
 		})
 	}
-	in := promotion.ScopeInput{
+	in := scopeInput{
 		Head:           headSHA,
 		Boundary:       boundarySHA,
 		BoundaryRef:    strings.TrimSpace(boundaryRef),
@@ -184,15 +184,15 @@ func runPromotionScope(cmd *cobra.Command, head, boundary, boundaryRef string) e
 		Issues:         issues,
 		Ancestor:       scopeAncestor(git),
 	}
-	res, err := promotion.DeriveScope(in)
+	res, err := deriveScope(in)
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), promotion.FormatScope(in, res))
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), formatScope(in, res))
 	return nil
 }
 
-func scopeAncestor(git *adapters.Client) promotion.AncestorFunc {
+func scopeAncestor(git *adapters.Client) scopeAncestorFunc {
 	return func(ancestor, descendant string) (bool, error) {
 		if _, err := git.ResolveRevision(ancestor); err != nil {
 			return false, nil

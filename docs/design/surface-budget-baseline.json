@@ -1076,7 +1076,7 @@
       ]
     },
     "internal/ops": {
-      "count": 229,
+      "count": 231,
       "names": [
         "AffectsValidity",
         "AppendAndCommit",
@@ -1113,6 +1113,8 @@
         "EncodeWorktree",
         "ExtractOps",
         "GateEvidence",
+        "GateEvidence.ActionsRepository",
+        "GateEvidence.ActionsRunID",
         "GateEvidence.CI",
         "GateEvidence.Citable",
         "GateEvidence.Command",
@@ -1534,7 +1536,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 121,
+      "count": 122,
       "names": [
         "ActiveStop",
         "ActiveStop.AndonURL",
@@ -1619,6 +1621,7 @@
         "PlanOpts.Viewer",
         "PlanTrip",
         "ReadyInput",
+        "ReadyInput.ActionsRunID",
         "ReadyInput.BaseSHA",
         "ReadyInput.GateEvidence",
         "ReadyInput.Graph",

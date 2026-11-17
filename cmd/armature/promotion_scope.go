@@ -1,4 +1,4 @@
-package promotion
+package main
 
 import (
 	"fmt"
@@ -6,79 +6,80 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/promotion"
 )
 
 // Scope kinds printed by `arm promotion-ready scope`.
 const (
-	ScopeKindScoped = "scoped"
-	ScopeKindNone   = "no-scope"
+	scopeKindScoped = "scoped"
+	scopeKindNone   = "no-scope"
 )
 
-// AncestorFunc reports whether ancestor is an ancestor of descendant
+// scopeAncestorFunc reports whether ancestor is an ancestor of descendant
 // (a commit is an ancestor of itself). A missing object is the caller's
-// choice; DeriveScope forwards errors.
-type AncestorFunc func(ancestor, descendant string) (bool, error)
+// choice; deriveScope forwards errors.
+type scopeAncestorFunc func(ancestor, descendant string) (bool, error)
 
-// ScopeIssue is the ops view DeriveScope needs. It does not read a PR body.
-type ScopeIssue struct {
+// scopeIssue is the ops view deriveScope needs. It does not read a PR body.
+type scopeIssue struct {
 	ID          string
 	Status      string
 	Base        string
 	Tip         string
 	Children    []string
-	Assessments []AssessmentFact
+	Assessments []promotion.AssessmentFact
 }
 
-// ScopeInput is the PR-shaped query for ID-scoped deliveries.
+// scopeInput is the PR-shaped query for ID-scoped deliveries.
 // Boundary is the pull-request base SHA (the exclusion edge).
 // BoundaryRef is that ref's name (for the stacked log line).
 // IntegrationRef is the repo integration branch (default main).
-type ScopeInput struct {
+type scopeInput struct {
 	Head           string
 	Boundary       string
 	BoundaryRef    string
 	IntegrationRef string
-	Issues         []ScopeIssue
-	Ancestor       AncestorFunc
+	Issues         []scopeIssue
+	Ancestor       scopeAncestorFunc
 }
 
-// ScopeDelivery is one promotion-ready invocation: leaves that share a
+// scopeDelivery is one promotion-ready invocation: leaves that share a
 // recorded delivery base. Assessed is true when any leaf has an attestation
 // keyed by (Base, Head) — the PR head, not an older recorded tip.
-type ScopeDelivery struct {
+type scopeDelivery struct {
 	Base     string
 	IssueIDs []string
 	Assessed bool
 }
 
-// ScopeResult is the derived delivery set. Kind is scoped or no-scope.
+// scopeResult is the derived delivery set. Kind is scoped or no-scope.
 // Stacked is true when the PR base ref is not the integration branch.
-type ScopeResult struct {
+type scopeResult struct {
 	Kind       string
 	Stacked    bool
-	Deliveries []ScopeDelivery
+	Deliveries []scopeDelivery
 }
 
-// DeriveScope selects done leaves whose recorded tip is in the PR's unique
+// deriveScope selects done leaves whose recorded tip is in the PR's unique
 // history: an ancestor of Head (including Head) and not an ancestor of
 // Boundary. Parents are not leaves. --base for each group is the recorded
 // delivery base. A tip in range with no recorded base is an error.
-func DeriveScope(in ScopeInput) (ScopeResult, error) {
+func deriveScope(in scopeInput) (scopeResult, error) {
 	if strings.TrimSpace(in.Head) == "" {
-		return ScopeResult{}, fmt.Errorf("promotion-ready: head SHA is required")
+		return scopeResult{}, fmt.Errorf("promotion-ready: head SHA is required")
 	}
 	if strings.TrimSpace(in.Boundary) == "" {
-		return ScopeResult{}, fmt.Errorf("promotion-ready: boundary SHA is required")
+		return scopeResult{}, fmt.Errorf("promotion-ready: boundary SHA is required")
 	}
 	if in.Ancestor == nil {
-		return ScopeResult{}, fmt.Errorf("promotion-ready: ancestor check is required")
+		return scopeResult{}, fmt.Errorf("promotion-ready: ancestor check is required")
 	}
 	integration := strings.TrimSpace(in.IntegrationRef)
 	if integration == "" {
 		integration = "main"
 	}
-	res := ScopeResult{
-		Kind:    ScopeKindNone,
+	res := scopeResult{
+		Kind:    scopeKindNone,
 		Stacked: in.BoundaryRef != "" && in.BoundaryRef != integration,
 	}
 
@@ -99,27 +100,27 @@ func DeriveScope(in ScopeInput) (ScopeResult, error) {
 		}
 		inHead, err := in.Ancestor(tip, in.Head)
 		if err != nil {
-			return ScopeResult{}, fmt.Errorf("promotion-ready: place tip of %s: %w", iss.ID, err)
+			return scopeResult{}, fmt.Errorf("promotion-ready: place tip of %s: %w", iss.ID, err)
 		}
 		if !inHead {
 			continue
 		}
 		onBoundary, err := in.Ancestor(tip, in.Boundary)
 		if err != nil {
-			return ScopeResult{}, fmt.Errorf("promotion-ready: place tip of %s: %w", iss.ID, err)
+			return scopeResult{}, fmt.Errorf("promotion-ready: place tip of %s: %w", iss.ID, err)
 		}
 		if onBoundary {
 			continue
 		}
 		base := strings.TrimSpace(iss.Base)
 		if base == "" {
-			return ScopeResult{}, fmt.Errorf(
+			return scopeResult{}, fmt.Errorf(
 				"promotion-ready: %s has tip %s in %s..%s but no recorded delivery base",
 				iss.ID, tip, in.Boundary, in.Head,
 			)
 		}
 		groups[base] = append(groups[base], iss.ID)
-		if !assessed[base] && hasAssessment(iss.Assessments, base, in.Head) {
+		if !assessed[base] && scopeHasAssessment(iss.Assessments, base, in.Head) {
 			assessed[base] = true
 		}
 	}
@@ -131,12 +132,12 @@ func DeriveScope(in ScopeInput) (ScopeResult, error) {
 		bases = append(bases, base)
 	}
 	sort.Strings(bases)
-	res.Kind = ScopeKindScoped
-	res.Deliveries = make([]ScopeDelivery, 0, len(bases))
+	res.Kind = scopeKindScoped
+	res.Deliveries = make([]scopeDelivery, 0, len(bases))
 	for _, base := range bases {
 		ids := append([]string(nil), groups[base]...)
 		sort.Strings(ids)
-		res.Deliveries = append(res.Deliveries, ScopeDelivery{
+		res.Deliveries = append(res.Deliveries, scopeDelivery{
 			Base:     base,
 			IssueIDs: ids,
 			Assessed: assessed[base],
@@ -145,7 +146,7 @@ func DeriveScope(in ScopeInput) (ScopeResult, error) {
 	return res, nil
 }
 
-func hasAssessment(atts []AssessmentFact, base, head string) bool {
+func scopeHasAssessment(atts []promotion.AssessmentFact, base, head string) bool {
 	for _, att := range atts {
 		if att.BaseSHA == base && att.HeadSHA == head {
 			return true
@@ -154,8 +155,8 @@ func hasAssessment(atts []AssessmentFact, base, head string) bool {
 	return false
 }
 
-// FormatScope is the log contract for no-scope, stacked, and each delivery.
-func FormatScope(in ScopeInput, res ScopeResult) string {
+// formatScope is the log contract for no-scope, stacked, and each delivery.
+func formatScope(in scopeInput, res scopeResult) string {
 	integration := strings.TrimSpace(in.IntegrationRef)
 	if integration == "" {
 		integration = "main"
@@ -163,7 +164,7 @@ func FormatScope(in ScopeInput, res ScopeResult) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "promotion-scope: kind=%s head=%s boundary=%s boundary_ref=%s stacked=%t integration=%s\n",
 		res.Kind, in.Head, in.Boundary, in.BoundaryRef, res.Stacked, integration)
-	if res.Kind == ScopeKindNone {
+	if res.Kind == scopeKindNone {
 		b.WriteString("promotion-scope: no ID-scoped delivery; pass is not a bypass of R2/R3/R4 " +
 			"because arm land promotes only done leaves whose tip is in this range and there are none\n")
 		return b.String()

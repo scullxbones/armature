@@ -139,3 +139,30 @@ func ciFullEvidence(head string) ops.GateEvidence {
 		CI:      true,
 	}
 }
+
+func TestCheckReady_ActionsRunIDBindsEvidence_REQ_480(t *testing.T) {
+	t.Parallel()
+	base, tip := "base1", "tip1"
+	ev := ciFullEvidence(tip)
+	assert.True(t, ev.PromotionReadyEvidence(tip), "run id is not part of PromotionReadyEvidence")
+	in := promotion.ReadyInput{
+		BaseSHA: base, HeadSHA: tip,
+		Issues: map[string]promotion.ReadyIssue{
+			"task-01": {
+				DefinitionOfDone: "done",
+				Acceptance:       []byte(`["ok"]`),
+				Assessments:      []promotion.AssessmentFact{{BaseSHA: base, HeadSHA: tip}},
+			},
+		},
+		IssueIDs:     []string{"task-01"},
+		GateEvidence: []ops.GateEvidence{ev},
+		ActionsRunID: "999",
+	}
+	err := promotion.CheckReady(in)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "actions run 999")
+
+	ev.ActionsRunID = "999"
+	in.GateEvidence = []ops.GateEvidence{ev}
+	require.NoError(t, promotion.CheckReady(in))
+}
