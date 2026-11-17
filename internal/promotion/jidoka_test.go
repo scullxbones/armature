@@ -40,7 +40,6 @@ func TestActiveStops_OrdersByAtNotFilename_REQ_482(t *testing.T) {
 
 	t.Run("clear@200 earlier-named log beats trip@100 later-named", func(t *testing.T) {
 		t.Parallel()
-		// Seq mirrors ReadAll: a-worker (clear@200) Seq=0, z-worker (trip@100) Seq=1.
 		history := []ops.PromotionStop{
 			{Action: ops.PromotionStopClear, TreeRoot: "t1", At: 200, Seq: 0},
 			{Action: ops.PromotionStopTrip, TreeRoot: "t1", IssueID: "t1", Kind: "missing-assessment", At: 100, Seq: 1},
@@ -48,9 +47,8 @@ func TestActiveStops_OrdersByAtNotFilename_REQ_482(t *testing.T) {
 		assert.Empty(t, promotion.ActiveStops(history))
 	})
 
-	t.Run("filenames swapped same At ordering", func(t *testing.T) {
+	t.Run("clear@200 later Seq still beats trip@100 earlier Seq", func(t *testing.T) {
 		t.Parallel()
-		// a-worker trip@100 Seq=0, z-worker clear@200 Seq=1 — clear still wins by At.
 		history := []ops.PromotionStop{
 			{Action: ops.PromotionStopTrip, TreeRoot: "t1", IssueID: "t1", Kind: "missing-assessment", At: 100, Seq: 0},
 			{Action: ops.PromotionStopClear, TreeRoot: "t1", At: 200, Seq: 1},
@@ -60,14 +58,12 @@ func TestActiveStops_OrdersByAtNotFilename_REQ_482(t *testing.T) {
 
 	t.Run("same-second tie uses Seq", func(t *testing.T) {
 		t.Parallel()
-		// Same At: earlier Seq is trip, later Seq is clear → clear wins.
 		cleared := []ops.PromotionStop{
 			{Action: ops.PromotionStopTrip, TreeRoot: "t1", IssueID: "t1", Kind: "k", At: 50, Seq: 0},
 			{Action: ops.PromotionStopClear, TreeRoot: "t1", At: 50, Seq: 1},
 		}
 		assert.Empty(t, promotion.ActiveStops(cleared))
 
-		// Same At: earlier Seq is clear, later Seq is trip → trip wins.
 		armed := []ops.PromotionStop{
 			{Action: ops.PromotionStopClear, TreeRoot: "t1", At: 50, Seq: 0},
 			{Action: ops.PromotionStopTrip, TreeRoot: "t1", IssueID: "t1", Kind: "k", At: 50, Seq: 1},

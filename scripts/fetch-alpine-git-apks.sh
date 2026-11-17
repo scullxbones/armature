@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Download the closed Alpine v3.22 git .apk set and verify each sha256.
-# Usage: fetch-alpine-git-apks.sh <dest-dir>
-# Bash 3.2 compatible.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,7 +16,6 @@ if [ ! -f "$SUMS" ]; then
 fi
 
 mkdir -p "$DEST"
-# Copy checksums into dest for sha256sum -c (paths are basenames).
 cp "$SUMS" "$DEST/SHA256SUMS"
 
 (
@@ -34,8 +30,7 @@ cp "$SUMS" "$DEST/SHA256SUMS"
     if [ ! -f "$fn" ]; then
       curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o "$fn" "$BASE_URL/$fn"
     fi
-  done <SHA256SUMS
-  # Verify only data lines (sha256sum -c ignores comments? — filter).
+    done <SHA256SUMS
   grep -vE '^(#|$)' SHA256SUMS | sha256sum -c -
 )
 

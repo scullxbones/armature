@@ -9,10 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPromotionReadyPRProof_REQ_480 is the hermetic log the CI job prints:
-// non-conforming deliveries fail with PROMOTION-READY-1, a conforming
-// delivery passes, no-scope and stacked ranges finish with an explicit rule,
-// and the assessment is recorded after the head exists and before the check.
 func TestPromotionReadyPRProof_REQ_480(t *testing.T) {
 	t.Parallel()
 
@@ -84,8 +80,6 @@ func TestPromotionReadyPRProof_REQ_480(t *testing.T) {
 	t.Run("no-scope", func(t *testing.T) {
 		t.Parallel()
 		repo, base, tip := promotionReadyFixture(t)
-		// task-01 is not done. A done leaf whose tip is the boundary is the
-		// parent history, not this PR.
 		plantVerifiedTask(t, repo, "on-base", "on-base.go")
 		appendDone(t, repo, "on-base", base, base)
 		out, err := runTrls(t, repo, "promotion-ready", "scope",
@@ -126,10 +120,6 @@ func TestPromotionReadyPRProof_REQ_480(t *testing.T) {
 		t.Parallel()
 		repo, base, tip := promotionReadyFixture(t)
 		appendDone(t, repo, "task-01", base, tip)
-		// The head commit already exists. The check refuses until the
-		// assessment for that head is recorded and CI evidence exists.
-		// Recording happens before the successful check; nothing here is a
-		// workflow rerun.
 		_, err := runTrls(t, repo, "promotion-ready", "--issue", "task-01", "--base", base, "--head", tip, "--format", "human")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "PROMOTION-READY-1")

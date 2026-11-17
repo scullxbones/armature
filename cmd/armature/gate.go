@@ -194,22 +194,11 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: dirty tree — gate evidence recorded as uncommitted (not citable)")
 	}
 	if runErr != nil {
-		// The child's output and the status line above are already on stdout:
-		// this is the gate's wire protocol, not a value handleRootError may
-		// append to. Classify the nonzero return as a protocol exit so no
-		// Command Failure object is concatenated after the streamed text
-		// (ADR 0020 §7); the reason still reaches stderr.
 		return skipCommandFailure(fmt.Errorf("gate %s exited %d: %w", profile, exit, runErr))
 	}
 	return nil
 }
 
-// observeActionsCI reports whether this process is a GitHub Actions run.
-// ci=true requires GITHUB_ACTIONS=true and non-empty GITHUB_RUN_ID and
-// GITHUB_REPOSITORY. A lone GITHUB_ACTIONS=true does not record CI evidence.
-// The runner sets the trio; the promotion-ready job does not take them from
-// the PR. A local process that exports the same variables can still set the
-// flag, which is why the CI job also binds --actions-run-id.
 func observeActionsCI(env Env) (ci bool, runID, repo string) {
 	if envLookup(env, "GITHUB_ACTIONS") != "true" {
 		return false, "", ""
@@ -225,17 +214,6 @@ func observeActionsCI(env Env) (ci bool, runID, repo string) {
 	return true, runID, repo
 }
 
-// gateTreeUncommitted reports whether the invoking checkout has non-ignored
-// changes that are not armature state. The command itself is loaded from
-// HEAD:gates.json (not the worktree file). A porcelain !! path is exempt
-// only when check-ignore names a source tracked at HEAD (usually
-// .gitignore); .git/info/exclude and other untracked ignore sources mark
-// the run uncommitted. Status recurses into populated submodules with
-// --untracked-files=all --ignore-submodules=none. A gitlink directory
-// that has files but no .git is dirty. skip-worktree / assume-unchanged
-// are walked in the superproject and populated submodules. The isolated
-// git client pins --work-tree/--git-dir from the filesystem .git so
-// GIT_WORK_TREE, GIT_DIR, and core.worktree cannot redirect the check.
 func gateTreeUncommitted(git *adapters.Client) (bool, error) {
 	entries, err := git.DirtyEntriesIncludingSubmodules()
 	if err != nil {

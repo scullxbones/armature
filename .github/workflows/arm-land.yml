@@ -1,9 +1,6 @@
 # ADR 0026 N1 (#481): post-merge apply via `arm land --pr` + scheduled sweep.
 # Workflow token only — no new secrets. Token never written into git config /
-# remote URL. networkCmd and scripts/github-actions-git-auth.sh send
-# Authorization: basic base64(x-access-token:TOKEN) for github.com.
-# workflow_dispatch input proof pushes refs/heads/_armature-ci-proof/<run_id>
-# and deletes it. That path does not publish _armature and does not land PRs.
+# remote URL.
 name: Arm land
 
 on:

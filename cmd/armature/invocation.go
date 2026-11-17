@@ -119,9 +119,7 @@ type Invocation struct {
 
 	replayLeases          func([]ops.Op) map[string]claim.Lease
 	afterIdempotencyCheck func()
-	// createAndonIssue is a test hook for jidoka andon/dogfood creates.
-	// Nil uses the env-backed GitHub creator. Per-invocation — never a package global.
-	createAndonIssue issueCreator
+	createAndonIssue      issueCreator
 }
 
 type session struct {
@@ -322,10 +320,7 @@ func commandFor(inv Invocation) *cobra.Command {
 	return root
 }
 
-// Run is the only CLI entrypoint. main() and tests both call it.
-// A nil ctx keeps the session context attachSession already bound (that helper
-// has no context parameter, so it may call context.Background). Run never
-// assigns context.Background itself: doing so is a non-inherited context.
+// Run is the only CLI entrypoint.
 //
 //nolint:contextcheck // cobra takes ctx from Command.SetContext; constructors and git helpers cannot accept Run's ctx
 func Run(ctx context.Context, inv Invocation) int {

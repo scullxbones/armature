@@ -2386,7 +2386,6 @@ func TestRestoreEvidence_MissingContainedUnreachable_REQ_TOPTIER_S12_T1G(t *test
 	olderBundle := filepath.Join(t.TempDir(), "older.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(olderBundle, older, "refs/heads/_armature"))
 
-	// Advance origin past the bundled tip → recovered is a strict ancestor.
 	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "newer")
 	gittest.Git(t, repo, "push", "origin", "_armature")
 	newer := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
@@ -2399,7 +2398,6 @@ func TestRestoreEvidence_MissingContainedUnreachable_REQ_TOPTIER_S12_T1G(t *test
 	assert.False(t, originAnc)
 	assert.True(t, recoveredAnc)
 
-	// Structural missing: delete remote branch; ls-remote empty → missing.
 	gittest.Git(t, fx.Origin, "update-ref", "-d", "refs/heads/_armature")
 	missing, originTip, recovered, originAnc, recoveredAnc, err = c.RestoreEvidence(olderBundle, "refs/heads/_armature", "_armature")
 	require.NoError(t, err)
@@ -2573,7 +2571,6 @@ func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	_, trackErr := adapters.NonInteractiveGitCommand(repo, "rev-parse", "refs/remotes/origin/_armature").CombinedOutput()
 	require.Error(t, trackErr, "per-run fetch must not create shared refs/remotes/origin/_armature")
 
-	// Intentional tracking refresh still works (FetchTrackingRefWithoutMovingHEAD).
 	require.NoError(t, c.FetchTrackingRefWithoutMovingHEAD("_armature"))
 	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature"))
 	before := tip
@@ -2914,7 +2911,6 @@ func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.
 	})
 	require.Error(t, restoreErr, "proxied.invalid via answering 503 proxy must fail-closed")
 
-	// FetchBranchToRef is the same class (snapshot refresh).
 	fetchErr := awaitProxyHitGrowth(t, hits, accepted, func() error {
 		return c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proxyproof")
 	})
@@ -2942,7 +2938,6 @@ func TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T
 	gittest.Git(t, repo, "update-ref", "refs/armature-tmp/deadbeefcafebabe/bundle", tip)
 	gittest.Git(t, repo, "update-ref", "refs/armature-tmp/deadbeefcafebabe/origin", tip)
 
-	// Concurrent live nonce: lease with this process's pid + staging refs.
 	liveNonce := "livecafe01234567"
 	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	leasePath := filepath.Join(gitDir, "armature-run-leases", "armature-tmp", liveNonce)
@@ -2972,8 +2967,6 @@ func TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T
 	assert.Contains(t, left, liveNonce+"/origin", "live leased nonce must not be swept")
 }
 
-// TestBeginPerRunRef_SweepsStaleOriginRun_REQ_TOPTIER_S12_T1G covers the same
-// crash-safe class for snapshot's refs/remotes/origin/_armature-run/<nonce>.
 func TestBeginPerRunRef_SweepsStaleOriginRun_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
@@ -3071,7 +3064,6 @@ func TestBundleVerify_SweepsDeadPidWorkLease_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	_, err = os.Stat(leasePath)
 	assert.True(t, os.IsNotExist(err), "dead-pid lease must be removed")
 
-	// Idempotent release path via BeginPerRunRef.
 	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
 	require.NoError(t, err)
 	require.NoError(t, c.UpdateRef(ref, tip))
@@ -3158,7 +3150,6 @@ func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testin
 	defer releaseLive()
 	require.NoError(t, mainClient.UpdateRef(liveRef, tip))
 
-	// Peer worktree starts a run (sweeps) while main's lease is live.
 	peerRef, releasePeer, err := wtClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
 	require.NoError(t, err)
 	defer releasePeer()
@@ -3410,7 +3401,6 @@ func TestOpsBackupFetches_NoTagsPreservesClone_REQ_TOPTIER_S12_T1G(t *testing.T)
 	dst := "refs/remotes/origin/_armature-run/notagsproof"
 	require.NoError(t, c.FetchBranchToRef("_armature", dst))
 	afterFetch := snapshotRefsAndTags(t, repo)
-	// Per-run destination is expected; strip it for the identity compare.
 	delete(afterFetch, dst)
 	assert.Equal(t, beforeRefs, afterFetch, "FetchBranchToRef must leave refs+tags unchanged aside from dst")
 

@@ -288,9 +288,6 @@ coverage: build
 coverage-check: coverage
 	@scripts/coverage-check.sh . coverage.out
 
-# Sole make entrypoint for container images. KEY must exist in
-# scripts/container-images.manifest; refuses non-manifest keys.
-# Example: make container-run KEY=bash-3.2.57 ARGS='--rm' CMD='bash --version'
 container-run:
 	@test -n "$(KEY)" || { echo "FAIL: KEY= required (manifest key)"; exit 2; }
 	@scripts/run-container-image.sh "$(KEY)" $(ARGS) -- $(CMD)

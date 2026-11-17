@@ -200,7 +200,6 @@ func TestLandDryRunNeverTripsJidoka_REQ_482(t *testing.T) {
 
 	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
 	require.NoError(t, err)
-	// On-target without assessment → missing-assessment; dry-run must not trip.
 	run(t, repo, "git", "checkout", "main")
 	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--squash", issue.Tip)
 	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "commit", "-m", "feat(task-01): squash (#66)")

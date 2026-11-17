@@ -23,7 +23,6 @@ permissions:
 
 env:
   GO_VERSION: "1.26.11"
-  # Exact floor exercised by check-git-2-34 (source tarball + sha256).
   GIT_MIN_VERSION: "2.34.0"
   GIT_MIN_TARBALL_SHA256: "0ce6222bfd31938b29360150286b51c77c643fa97740b1d35b6d1ceef8b0ecd7"
   GIT_MIN_TARBALL_URL: "https://www.kernel.org/pub/software/scm/git/git-2.34.0.tar.gz"
@@ -124,15 +123,9 @@ jobs:
       - name: Mutation fixtures must succeed under host Bash 4+
         run: bash scripts/prove-bash32-mutations.sh
       - name: Run cross-OS scripts under pinned bash:3.2.57
-        # Image via scripts/container-images.manifest key bash-3.2.57 only
-        # (scripts/run-container-image.sh — sole docker entrypoint).
-        # Closed Alpine v3.22 git .apk set sha256-verified (scripts/alpine-v322-git-apks.sha256),
-        # then apk add --no-network with explicit basenames from that file (no star-glob under /apks);
-        # --allow-untrusted only for those verified files.
         run: |
           apkdir="${RUNNER_TEMP:-/tmp}/alpine-git-apks"
           bash scripts/fetch-alpine-git-apks.sh "$apkdir"
-          # Explicit basenames from scripts/alpine-v322-git-apks.sha256 (not a glob).
           scripts/run-container-image.sh bash-3.2.57 \
             --rm \
             --entrypoint sh \
@@ -165,7 +158,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      # ubuntu-latest does not ship rg. census/skills scripts and check-core helpers still use it.
       - name: Install ripgrep
         run: |
           dest="${HOME}/.local/bin"
@@ -175,9 +167,6 @@ jobs:
       - run: make check-job JOB=check-core
         env:
           CHECK_INSTALL_TOOLS: "1"
-      # Fail-closed quote check (hundredths |d|≤10). Live PR body via gh api
-      # (event payload goes stale on late paste). Upload the log BEFORE compare
-      # so a failed compare still leaves the artifact for the edited workflow.
       - name: Write coverage-check.log
         if: github.event_name == 'pull_request'
         run: |
@@ -211,7 +200,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Lean (b): this is the ONE CI job that owns commit-subjects. Pin the PR
+      # This is the one CI job that owns commit-subjects. Pin the PR
       # tip (not the synthetic merge SHA) so origin/main..HEAD lists real commits.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -237,7 +226,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      # ubuntu-latest does not ship rg. test-check-jobs uses rg -q.
       - name: Install ripgrep
         run: |
           dest="${HOME}/.local/bin"
@@ -273,11 +261,6 @@ jobs:
         env:
           CHECK_INSTALL_TOOLS: "1"
 
-  # Exact Git floor (2.34.0) from a checksum-pinned source build. Proves the
-  # full CHECK_JOBS suite (incl. S12 ops-backup) on the documented minimum.
-  # Uses make check-git-floor — same partitions as other CI jobs — not bare
-  # make check: PR merge SHAs have unscoped subjects, so check-commit-subjects
-  # would exit before the suite. Partitions do not need origin/main.
   check-git-2-34:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
