@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/tui"
-	"github.com/scullxbones/armature/internal/tui/detail"
 )
 
 type visibleNode struct {
@@ -28,13 +27,12 @@ type Model struct {
 	filter       string
 	width        int
 	height       int
-	detail       detail.Model
+	detail       issueDetail
 }
 
 func New() *Model {
 	return &Model{
 		expanded: make(map[string]bool),
-		detail:   detail.New(),
 	}
 }
 
@@ -43,7 +41,7 @@ func (m *Model) Init() tea.Cmd { return nil }
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.detail = m.detail.SetSize(width, height)
+	m.detail = m.detail.setSize(width, height)
 }
 
 func (m *Model) SetState(state *materialize.State) {
@@ -62,8 +60,8 @@ func (m *Model) HelpBar() string {
 }
 
 func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
-	if m.detail.IsOpen() {
-		newDetail, cmd := m.detail.Update(msg)
+	if m.detail.isOpen() {
+		newDetail, cmd := m.detail.update(msg)
 		m.detail = newDetail
 		return m, cmd
 	}
@@ -94,7 +92,7 @@ func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 			}
 		case "enter":
 			if m.cursor < len(m.visible) {
-				m.detail = m.detail.Open(m.visible[m.cursor].issue)
+				m.detail = m.detail.openIssue(m.visible[m.cursor].issue)
 			}
 		}
 	}
@@ -122,7 +120,7 @@ func (m *Model) View() string {
 
 	tree := strings.Join(lines, "\n")
 
-	if m.detail.IsOpen() {
+	if m.detail.isOpen() {
 		return m.renderWithOverlay(tree)
 	}
 	return tree
@@ -166,7 +164,7 @@ func (m *Model) renderNode(idx int) string {
 }
 
 func (m *Model) renderWithOverlay(tree string) string {
-	overlay := m.detail.View()
+	overlay := m.detail.view()
 	return tree + "\n" + overlay
 }
 

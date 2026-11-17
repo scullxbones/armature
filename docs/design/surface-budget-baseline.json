@@ -2073,19 +2073,6 @@
         "New"
       ]
     },
-    "internal/tui/detail": {
-      "count": 8,
-      "names": [
-        "Model",
-        "Model.Close",
-        "Model.IsOpen",
-        "Model.Open",
-        "Model.SetSize",
-        "Model.Update",
-        "Model.View",
-        "New"
-      ]
-    },
     "internal/tui/ready": {
       "count": 10,
       "names": [
