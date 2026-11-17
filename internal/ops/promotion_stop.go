@@ -22,7 +22,7 @@ const (
 
 // PromotionStop is the payload of a promotion-stop op.
 type PromotionStop struct {
-	Action   string `json:"action"`              // trip | clear
+	Action   string `json:"action"`
 	PR       string `json:"pr,omitempty"`        // GitHub PR number
 	IssueID  string `json:"issue_id,omitempty"`  // affected leaf / subject
 	TreeRoot string `json:"tree_root,omitempty"` // issue-tree root covered

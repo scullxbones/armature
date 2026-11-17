@@ -12,7 +12,6 @@ import (
 	"github.com/scullxbones/armature/internal/tui"
 )
 
-// issueDetail is the centred issue overlay on the dependency-tree screen.
 type issueDetail struct {
 	open     bool
 	issue    *materialize.Issue

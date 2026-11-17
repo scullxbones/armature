@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Hermetic proof that promotion-ready fails closed on a bad delivery and
-# passes on a conforming one, and that no-scope and stacked ranges finish
-# with an explicit rule. Run by scripts/promotion-ready-ci.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

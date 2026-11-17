@@ -584,7 +584,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	fetchCmd, _, cancelFetch := c.networkCmd("fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
 	defer cancelFetch()
 	if fetchErr := fetchCmd.Run(); fetchErr != nil {
-		// Origin can be missing on a fresh repo; the orphan path below still runs.
 		cancelFetch()
 	}
 
@@ -956,8 +955,6 @@ func (c *Client) fetchOriginRefSpec(spec, label string) error {
 	})
 }
 
-// withPublishDeadline returns a client whose networkCmd budget is the publish
-// cap, unless the caller already set WithNetworkTimeout.
 func (c *Client) withPublishDeadline() *Client {
 	if c == nil || c.networkTimeout > 0 {
 		return c

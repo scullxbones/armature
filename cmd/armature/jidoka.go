@@ -22,8 +22,6 @@ func init() {
 	armerrors.Register(codePromotionStop1)
 }
 
-// issueCreator opens a GitHub issue. Production uses the env-backed creator;
-// tests inject via Invocation.createAndonIssue (per-command, parallel-safe).
 type issueCreator func(ctx context.Context, owner, repo, title, body string, labels []string) (externalref.CreatedIssue, error)
 
 func newPromotionStopCmd() *cobra.Command {
@@ -139,8 +137,6 @@ func mapPromotionStopError(err error) error {
 	}
 }
 
-// tripJidokaOnFailedRows arms a tree stop for the first failing sync row and
-// opens exactly one andon (or a dogfood finding on repeated kind).
 func tripJidokaOnFailedRows(
 	cmd *cobra.Command,
 	pr string,

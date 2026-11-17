@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Verify fenced arm commands in skill files against the actual CLI."""
 
 import os
 import re
@@ -94,11 +93,6 @@ def find_lint_files(root_dir):
     return sorted(lint_files)
 
 
-def find_skill_files(root_dir):
-    """Backward-compatible alias for callers that only know the old name."""
-    return find_lint_files(root_dir)
-
-
 FENCE_RE = re.compile(r"^\s*```(\w*)\s*$")
 
 
@@ -141,7 +135,6 @@ def extract_code_blocks(content):
 
 
 def join_continued_lines(code_block):
-    """Join shell lines continued by an unquoted trailing backslash."""
     return re.sub(r"\\\n[ \t]*", " ", code_block)
 
 
@@ -161,7 +154,6 @@ def tokenize_shell_line(line):
 
 
 def _split_on_compound_ops(tokens):
-    """Split a token stream into command groups at compound-statement ops."""
     groups = [[]]
     for tok in tokens:
         if tok in _COMPOUND_OPS:
@@ -266,7 +258,6 @@ def has_angle_bracket_placeholder(tokens):
 
 
 def extract_arm_commands(code_block):
-    """Extract all arm command invocations from a code block."""
     commands = []
     lines = join_continued_lines(code_block).split("\n")
 
@@ -289,7 +280,6 @@ def extract_arm_commands(code_block):
 
 
 def get_valid_subcommands():
-    """Get the list of valid subcommands from arm --help."""
     try:
         result = subprocess.run(
             [ARM_BIN, "--help"],
@@ -328,14 +318,6 @@ def get_valid_subcommands():
 
 
 def get_subcommand_help(subcommands):
-    """Get the help text for a specific subcommand or subcommand chain.
-
-    Args:
-        subcommands: List of subcommand parts, e.g., ["sources", "add"]
-
-    Returns:
-        Help text if found, None otherwise
-    """
     try:
         cmd = [ARM_BIN] + subcommands + ["--help"]
         result = subprocess.run(
@@ -352,12 +334,6 @@ def get_subcommand_help(subcommands):
 
 
 def extract_valid_flags_from_help(help_text):
-    """Extract all valid flag names from help text.
-
-    Looks for lines like:
-      --flag string      description
-      -f, --flag         description
-    """
     if not help_text:
         return set()
 
@@ -388,11 +364,6 @@ def extract_valid_flags_from_help(help_text):
 
 
 def strip_persistent_prefix(tokens):
-    """Drop leading `arm` and root persistent flags (and their values).
-
-    Skills often write `arm --repo "$TARGET" --format agent bootstrap`.
-    After this prefix the remaining tokens start at the subcommand.
-    """
     if not tokens:
         return tokens
     i = 0
@@ -486,15 +457,6 @@ def extract_flags(args):
 
 
 def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
-    """Validate a single arm command.
-
-    Args:
-        arm_command: The arm command string to validate
-        valid_subcommands: Set of valid top-level subcommand names
-        valid_flags_cache: Dict mapping subcommand -> set of valid flags (for performance)
-
-    Returns: (is_valid, error_message)
-    """
     if valid_flags_cache is None:
         valid_flags_cache = {}
 
@@ -636,7 +598,7 @@ def lint_show_cycle_recovery(code_block, skill_file_path="", block_idx=0):
 # Target-repo git verbs that must be pinned with `git -C "$TARGET"` (or
 # `$TARGET_REPO`) inside the verify-armature skill. Bare forms mutate or read
 # whichever checkout the agent happens to be standing in — often the source
-# tree — which is exactly the Codex finding on worker-id reset.
+# tree.
 _VERIFY_TARGET_GIT_VERBS = (
     "config",
     "worktree",
@@ -665,7 +627,6 @@ _VERIFY_ARM_INVOKE_RE = re.compile(
 
 
 def is_verify_armature_path(path):
-    """True when path is under `.agents/skills/verify-armature/`."""
     parts = Path(path).parts
     for i in range(len(parts) - 2):
         if parts[i : i + 3] == (".agents", "skills", "verify-armature"):
@@ -731,15 +692,6 @@ def lint_verify_armature_pinning(content, skill_file_path=""):
 
 
 def lint_skill_file(skill_file_path, valid_subcommands, valid_flags_cache=None):
-    """Lint a single skill file.
-
-    Args:
-        skill_file_path: Path to the SKILL.md file
-        valid_subcommands: Set of valid subcommand names
-        valid_flags_cache: Dict mapping subcommand -> set of valid flags (for performance)
-
-    Returns: list of error messages (empty if all valid)
-    """
     if valid_flags_cache is None:
         valid_flags_cache = {}
 

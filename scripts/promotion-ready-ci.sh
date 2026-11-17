@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 # promotion-ready CI entry (ADR 0026 N1, issue #480).
-#
-# pull_request: HEAD must be github.event.pull_request.head.sha. GITHUB_SHA on
-# that event is the synthetic merge commit and is not the delivery tip.
-# Any other event (push to main, workflow_call): log N/A and exit 0.
-#
-# ID-scoped deliveries are derived by `arm promotion-ready scope` from ops
-# state (done-leaf tips in boundary..head). The PR body is not read.
-# Normative order: record the assessment for (base, head), arm push-ops,
-# then push the branch. This job refetches _armature until that assessment
-# is visible or PROMOTION_OPS_WAIT_SECONDS (default 45) elapses. It does not
-# refetch after `arm gate run full`.
+# The PR body is not read.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

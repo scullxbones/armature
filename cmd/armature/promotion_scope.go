@@ -9,7 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/promotion"
 )
 
-// Scope kinds printed by `arm promotion-ready scope`.
 const (
 	scopeKindScoped = "scoped"
 	scopeKindNone   = "no-scope"
@@ -20,7 +19,6 @@ const (
 // choice; deriveScope forwards errors.
 type scopeAncestorFunc func(ancestor, descendant string) (bool, error)
 
-// scopeIssue is the ops view deriveScope needs. It does not read a PR body.
 type scopeIssue struct {
 	ID          string
 	Status      string
@@ -30,10 +28,6 @@ type scopeIssue struct {
 	Assessments []promotion.AssessmentFact
 }
 
-// scopeInput is the PR-shaped query for ID-scoped deliveries.
-// Boundary is the pull-request base SHA (the exclusion edge).
-// BoundaryRef is that ref's name (for the stacked log line).
-// IntegrationRef is the repo integration branch (default main).
 type scopeInput struct {
 	Head           string
 	Boundary       string
@@ -52,18 +46,12 @@ type scopeDelivery struct {
 	Assessed bool
 }
 
-// scopeResult is the derived delivery set. Kind is scoped or no-scope.
-// Stacked is true when the PR base ref is not the integration branch.
 type scopeResult struct {
 	Kind       string
 	Stacked    bool
 	Deliveries []scopeDelivery
 }
 
-// deriveScope selects done leaves whose recorded tip is in the PR's unique
-// history: an ancestor of Head (including Head) and not an ancestor of
-// Boundary. Parents are not leaves. --base for each group is the recorded
-// delivery base. A tip in range with no recorded base is an error.
 func deriveScope(in scopeInput) (scopeResult, error) {
 	if strings.TrimSpace(in.Head) == "" {
 		return scopeResult{}, fmt.Errorf("promotion-ready: head SHA is required")
@@ -155,7 +143,6 @@ func scopeHasAssessment(atts []promotion.AssessmentFact, base, head string) bool
 	return false
 }
 
-// formatScope is the log contract for no-scope, stacked, and each delivery.
 func formatScope(in scopeInput, res scopeResult) string {
 	integration := strings.TrimSpace(in.IntegrationRef)
 	if integration == "" {

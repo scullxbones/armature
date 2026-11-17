@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Source this file, then call github_actions_git_auth_export.
 # Appends a github.com http.extraHeader for $GITHUB_TOKEN at the next free
 # GIT_CONFIG_* index (Git ≥2.31). GitHub's git HTTPS endpoint rejects
 # Authorization: Bearer with "invalid credentials"; the header is

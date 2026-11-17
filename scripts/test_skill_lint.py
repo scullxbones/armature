@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""Tests for skill_lint.py's quote-aware command tokenizer.
-
-These exercise the shlex-based tokenization pipeline directly (extraction,
-redirect-stripping, placeholder detection, flag extraction) without needing
-a real `arm` binary on PATH, complementing the end-to-end Go tests in
-cmd/armature/skill_lint_test.go that run the whole script against a built
-binary.
-"""
 
 import re
 import subprocess
@@ -15,8 +7,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# `python -m unittest scripts/test_skill_lint.py` puts the repo root on
-# sys.path, not scripts/.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from skill_lint import (  # noqa: E402
@@ -174,14 +164,6 @@ class TestStripRedirects(unittest.TestCase):
         )
 
     def test_only_consumes_operator_plus_one_target_token(self):
-        # This is the regression case: a quote-blind regex strip of
-        # ">something" would truncate "arm scope-rename <old-path>" far
-        # more aggressively than token-based stripping does. Token-based
-        # stripping only ever consumes the exact operator token plus the
-        # one token immediately after it, regardless of what came before.
-        # (In practice this exact <placeholder><placeholder> shape is
-        # already rejected upstream by has_angle_bracket_placeholder before
-        # strip_redirects ever runs on it -- see validate_command.)
         tokens = ["arm", "scope-rename", "<", "old-path", ">", "<", "new-path", ">"]
         self.assertEqual(strip_redirects(tokens), ["arm", "scope-rename", "new-path"])
 
@@ -463,9 +445,6 @@ class TestVerifyArmaturePinning(unittest.TestCase):
         )
 
     def test_legacy_and_current_agree_on_legitimate_git_lines(self):
-        # (line, matches unpinned git). Pinned -C / --git-dir / init stay
-        # allowed. Env-prefixed and capture-prefixed lines stay flagged when
-        # the git invocation itself is unpinned.
         cases = (
             ("env FOO=bar git config user.name", True),
             ('env FOO="bar baz" git push origin', True),

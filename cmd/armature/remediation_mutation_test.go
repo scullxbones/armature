@@ -16,11 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4 proves argv
-// filtering requires Decide: a nil Decide uses the tree-only gate and leaks foreign
-// live claim on a healthy tree (no merged ancestor). Gate kill proofs for
-// RequireOwner / ForeignLiveLeaseBlocks / tree consistency live in
-// remediation_gates_test.go (real path; no injected Decide).
 func TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	now := time.Now().Unix()
@@ -130,7 +125,6 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 	assert.Contains(t, osPlan.Alternatives[1].RunnableCommands(),
 		"arm transition --issue OS --to cancelled --force")
 
-	// Fresh expired fixtures per Option on OS (open subject).
 	for i := range osPlan.Alternatives {
 		fresh, fw := setupForeignExpiredMergedFixture(t)
 		before := loadPromotionGraph(t, fresh)

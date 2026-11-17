@@ -33,8 +33,7 @@ const (
 )
 
 // IsAuditOnly reports ops that record evidence or metadata without mutating
-// issue DAG state. Their target_id is not an issue ID (source UUID, gate
-// profile name) and must not be treated as unknown or as an orphaned issue.
+// issue DAG state. Doctor must not treat them as unknown or orphaned issues.
 func IsAuditOnly(opType string) bool {
 	switch opType {
 	case OpSourceFingerprint, OpGateEvidence, OpLogQuarantine, OpPromotionStop:
