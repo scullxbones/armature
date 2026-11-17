@@ -18,6 +18,9 @@ type ReadyIssue struct {
 
 // ReadyInput is the verify-only promotion-ready check (ADR 0026 N1 poka-yoke).
 // It never authors assessments or runs a model.
+// ActionsRunID, when set, requires the R2 evidence to carry that GitHub
+// Actions run id in addition to PromotionReadyEvidence. Empty leaves the
+// predicate unchanged.
 type ReadyInput struct {
 	BaseSHA      string
 	HeadSHA      string // current delivery tip; stale assessments must not pass
@@ -26,6 +29,7 @@ type ReadyInput struct {
 	GateEvidence []ops.GateEvidence
 	Stops        []ActiveStop // armed jidoka stops (ADR 0026)
 	Graph        Graph        // issue tree for stop coverage; optional
+	ActionsRunID string
 }
 
 // CheckReady verifies R2/R3/R4 for the requested scopes at HeadSHA.
@@ -42,7 +46,10 @@ func CheckReady(in ReadyInput) error {
 	if err := checkJidokaStops(in); err != nil {
 		return err
 	}
-	if !hasCIFullGateEvidence(in.GateEvidence, in.HeadSHA) {
+	if !hasCIFullGateEvidence(in.GateEvidence, in.HeadSHA, in.ActionsRunID) {
+		if in.ActionsRunID != "" {
+			return fmt.Errorf("promotion-ready: missing CI gate evidence for head %s from actions run %s (profile=full)", in.HeadSHA, in.ActionsRunID)
+		}
 		return fmt.Errorf("promotion-ready: missing CI gate evidence for head %s (profile=full)", in.HeadSHA)
 	}
 	for _, id := range in.IssueIDs {
@@ -60,11 +67,15 @@ func CheckReady(in ReadyInput) error {
 	return nil
 }
 
-func hasCIFullGateEvidence(evs []ops.GateEvidence, headSHA string) bool {
+func hasCIFullGateEvidence(evs []ops.GateEvidence, headSHA, actionsRunID string) bool {
 	for _, ev := range evs {
-		if ev.PromotionReadyEvidence(headSHA) {
-			return true
+		if !ev.PromotionReadyEvidence(headSHA) {
+			continue
 		}
+		if actionsRunID != "" && ev.ActionsRunID != actionsRunID {
+			continue
+		}
+		return true
 	}
 	return false
 }

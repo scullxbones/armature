@@ -13,21 +13,26 @@ const OpGateEvidence = "gate-evidence"
 
 // GateEvidence is the payload of a gate-evidence op: the process that observed
 // the exit status writes the record. Dirty-tree runs set Uncommitted and are
-// not citable. CI is set only when the wrapper runs under GitHub Actions
-// (ADR 0026: local runs never count as promotion-ready gate evidence).
+// not citable. CI is set only when the wrapper observes GitHub Actions
+// (GITHUB_ACTIONS=true plus non-empty GITHUB_RUN_ID and GITHUB_REPOSITORY).
+// A lone GITHUB_ACTIONS=true does not count. ActionsRunID and
+// ActionsRepository are audit fields; PromotionReadyEvidence does not read
+// them (ADR 0026: local runs never count as promotion-ready gate evidence).
 type GateEvidence struct {
-	Profile     string   `json:"profile"`
-	Command     []string `json:"command"`
-	HeadSHA     string   `json:"head_sha"`
-	Start       int64    `json:"start"`
-	End         int64    `json:"end"`
-	Exit        int      `json:"exit"`
-	Uncommitted bool     `json:"uncommitted,omitempty"`
-	CI          bool     `json:"ci,omitempty"`
-	OutputHash  string   `json:"output_hash,omitempty"`
-	OutputHead  string   `json:"output_head,omitempty"`
-	OutputTail  string   `json:"output_tail,omitempty"`
-	LogPath     string   `json:"log_path,omitempty"`
+	Profile           string   `json:"profile"`
+	Command           []string `json:"command"`
+	HeadSHA           string   `json:"head_sha"`
+	Start             int64    `json:"start"`
+	End               int64    `json:"end"`
+	Exit              int      `json:"exit"`
+	Uncommitted       bool     `json:"uncommitted,omitempty"`
+	CI                bool     `json:"ci,omitempty"`
+	ActionsRunID      string   `json:"actions_run_id,omitempty"`
+	ActionsRepository string   `json:"actions_repository,omitempty"`
+	OutputHash        string   `json:"output_hash,omitempty"`
+	OutputHead        string   `json:"output_head,omitempty"`
+	OutputTail        string   `json:"output_tail,omitempty"`
+	LogPath           string   `json:"log_path,omitempty"`
 }
 
 // Citable reports whether the run can satisfy a gate criterion (clean tree, exit 0).
@@ -37,6 +42,8 @@ func (e GateEvidence) Citable() bool {
 
 // PromotionReadyEvidence reports whether the run satisfies ADR 0026 R2 for
 // promotion-ready: citable full profile recorded in CI at the given head.
+// It does not consult ActionsRunID. Callers that must bind a specific
+// Actions run add that check themselves.
 func (e GateEvidence) PromotionReadyEvidence(headSHA string) bool {
 	return e.Citable() && e.CI && e.Profile == "full" && e.HeadSHA == headSHA
 }
