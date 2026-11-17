@@ -164,7 +164,8 @@ func FormatScope(in ScopeInput, res ScopeResult) string {
 	fmt.Fprintf(&b, "promotion-scope: kind=%s head=%s boundary=%s boundary_ref=%s stacked=%t integration=%s\n",
 		res.Kind, in.Head, in.Boundary, in.BoundaryRef, res.Stacked, integration)
 	if res.Kind == ScopeKindNone {
-		b.WriteString("promotion-scope: no ID-scoped delivery; pass is not a bypass of R2/R3/R4 because arm land promotes only done leaves whose tip is in this range and there are none\n")
+		b.WriteString("promotion-scope: no ID-scoped delivery; pass is not a bypass of R2/R3/R4 " +
+			"because arm land promotes only done leaves whose tip is in this range and there are none\n")
 		return b.String()
 	}
 	if res.Stacked {
