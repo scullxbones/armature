@@ -1,4 +1,4 @@
-package detail_test
+package dagtree
 
 import (
 	"strings"
@@ -6,34 +6,31 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/tui/detail"
 )
 
 func TestDetailIsOpen(t *testing.T) {
 	t.Parallel()
-	m := detail.New()
-	if m.IsOpen() {
+	var m issueDetail
+	if m.isOpen() {
 		t.Error("new model should not be open")
 	}
 	issue := &materialize.Issue{ID: "T1", Title: "Task"}
-	m = m.Open(issue)
-	if !m.IsOpen() {
-		t.Error("model should be open after Open()")
+	m = m.openIssue(issue)
+	if !m.isOpen() {
+		t.Error("model should be open after openIssue()")
 	}
-	m = m.Close()
-	if m.IsOpen() {
-		t.Error("model should be closed after Close()")
+	m = m.close()
+	if m.isOpen() {
+		t.Error("model should be closed after close()")
 	}
 }
 
 func TestDetailUpdateCloseOnEsc(t *testing.T) {
 	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.IsOpen() {
+	m := issueDetail{}.setSize(80, 24).openIssue(issue)
+	m, _ = m.update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.isOpen() {
 		t.Error("esc should close the overlay")
 	}
 }
@@ -41,11 +38,9 @@ func TestDetailUpdateCloseOnEsc(t *testing.T) {
 func TestDetailUpdateCloseOnQ(t *testing.T) {
 	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	if m.IsOpen() {
+	m := issueDetail{}.setSize(80, 24).openIssue(issue)
+	m, _ = m.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if m.isOpen() {
 		t.Error("q should close the overlay")
 	}
 }
@@ -53,21 +48,17 @@ func TestDetailUpdateCloseOnQ(t *testing.T) {
 func TestDetailUpdateScrolling(t *testing.T) {
 	t.Parallel()
 	issue := &materialize.Issue{ID: "T1", Title: strings.Repeat("line\n", 20)}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m := issueDetail{}.setSize(80, 24).openIssue(issue)
+	m, _ = m.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	_, _ = m.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 }
 
 func TestDetailUpdateCopiesIssueID(t *testing.T) {
 	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
-	if !m.IsOpen() {
+	m := issueDetail{}.setSize(80, 24).openIssue(issue)
+	m, _ = m.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	if !m.isOpen() {
 		t.Error("c should not close the overlay")
 	}
 }
@@ -75,9 +66,8 @@ func TestDetailUpdateCopiesIssueID(t *testing.T) {
 func TestDetailSetSizeWhenOpen(t *testing.T) {
 	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
-	m := detail.New()
-	m = m.Open(issue)
-	_ = m.SetSize(100, 30)
+	m := issueDetail{}.openIssue(issue)
+	_ = m.setSize(100, 30)
 }
 
 func TestDetailBuildContentWithDefinitionOfDone(t *testing.T) {
@@ -87,10 +77,8 @@ func TestDetailBuildContentWithDefinitionOfDone(t *testing.T) {
 		Title:            "Task",
 		DefinitionOfDone: "All tests pass",
 	}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	v := m.View()
+	m := issueDetail{}.setSize(80, 24).openIssue(issue)
+	v := m.view()
 	if !strings.Contains(v, "All tests pass") {
 		t.Errorf("expected DefinitionOfDone in view, got: %s", v)
 	}
@@ -103,10 +91,8 @@ func TestDetailBuildContentWithOutcome(t *testing.T) {
 		Title:   "Task",
 		Outcome: "Delivered successfully",
 	}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	v := m.View()
+	m := issueDetail{}.setSize(80, 24).openIssue(issue)
+	v := m.view()
 	if !strings.Contains(v, "Delivered successfully") {
 		t.Errorf("expected Outcome in view, got: %s", v)
 	}
@@ -114,9 +100,9 @@ func TestDetailBuildContentWithOutcome(t *testing.T) {
 
 func TestDetailUpdateWhenClosed(t *testing.T) {
 	t.Parallel()
-	m := detail.New()
-	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	if m2.IsOpen() {
+	var m issueDetail
+	m2, cmd := m.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if m2.isOpen() {
 		t.Error("closed model should stay closed")
 	}
 	if cmd != nil {
@@ -130,10 +116,8 @@ func TestDetailViewRendersTitle(t *testing.T) {
 		ID:    "TASK-14",
 		Title: "Build detail overlay model",
 	}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	view := m.View()
+	m := issueDetail{}.setSize(80, 24).openIssue(issue)
+	view := m.view()
 	if !strings.Contains(view, "TASK-14") {
 		t.Errorf("expected TASK-14, got:\n%s", view)
 	}
@@ -144,17 +128,14 @@ func TestDetailViewRendersTitle(t *testing.T) {
 
 func TestDetailViewHidden(t *testing.T) {
 	t.Parallel()
-	m := detail.New()
-	m = m.Open(nil)
-	if m.View() != "" {
+	m := issueDetail{}.openIssue(nil)
+	if m.view() != "" {
 		t.Errorf("expected empty view for nil issue")
 	}
 
 	issue := &materialize.Issue{ID: "TASK-14"}
-	m2 := detail.New()
-	m2 = m2.Open(issue)
-	m2 = m2.Close()
-	if m2.View() != "" {
+	m2 := issueDetail{}.openIssue(issue).close()
+	if m2.view() != "" {
 		t.Errorf("expected empty view when closed")
 	}
 }

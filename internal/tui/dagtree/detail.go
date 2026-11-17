@@ -1,5 +1,4 @@
-// Package detail implements the TUI issue detail view.
-package detail
+package dagtree
 
 import (
 	"fmt"
@@ -13,9 +12,8 @@ import (
 	"github.com/scullxbones/armature/internal/tui"
 )
 
-// Model is the shared detail overlay used by dagtree and workers screens.
-// It renders a centred scrollable box showing all fields of a single issue.
-type Model struct {
+// issueDetail is the centred issue overlay on the dependency-tree screen.
+type issueDetail struct {
 	open     bool
 	issue    *materialize.Issue
 	viewport viewport.Model
@@ -23,29 +21,25 @@ type Model struct {
 	height   int
 }
 
-func New() Model {
-	return Model{}
-}
+func (m issueDetail) isOpen() bool { return m.open }
 
-func (m Model) IsOpen() bool { return m.open }
-
-func (m Model) Open(issue *materialize.Issue) Model {
+func (m issueDetail) openIssue(issue *materialize.Issue) issueDetail {
 	m.open = true
 	m.issue = issue
-	content := buildContent(issue)
+	content := buildDetailContent(issue)
 	vp := viewport.New(min(m.width-4, 90), m.height-6)
 	vp.SetContent(content)
 	m.viewport = vp
 	return m
 }
 
-func (m Model) Close() Model {
+func (m issueDetail) close() issueDetail {
 	m.open = false
 	m.issue = nil
 	return m
 }
 
-func (m Model) SetSize(width, height int) Model {
+func (m issueDetail) setSize(width, height int) issueDetail {
 	m.width = width
 	m.height = height
 	if m.open {
@@ -55,14 +49,14 @@ func (m Model) SetSize(width, height int) Model {
 	return m
 }
 
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m issueDetail) update(msg tea.Msg) (issueDetail, tea.Cmd) {
 	if !m.open {
 		return m, nil
 	}
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "esc", "q":
-			return m.Close(), nil
+			return m.close(), nil
 		case "j", "down":
 			m.viewport.LineDown(1)
 		case "k", "up":
@@ -80,7 +74,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m issueDetail) view() string {
 	if !m.open || m.issue == nil {
 		return ""
 	}
@@ -99,7 +93,7 @@ func (m Model) View() string {
 	return content
 }
 
-func buildContent(issue *materialize.Issue) string {
+func buildDetailContent(issue *materialize.Issue) string {
 	if issue == nil {
 		return ""
 	}
@@ -119,11 +113,4 @@ func buildContent(issue *materialize.Issue) string {
 	}
 
 	return b.String()
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
