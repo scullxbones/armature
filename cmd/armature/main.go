@@ -483,6 +483,7 @@ func pavedRoadCommands() map[string]pavedRoadClass {
 		"gate":                    {Kind: pavedRoadKindPaved},
 		"gate run":                {Kind: pavedRoadKindPaved},
 		"promotion-ready":         {Kind: pavedRoadKindEscape, Note: "CI verify-only poka-yoke (ADR 0026 N1). Reviewer path attests; this check never authors."},
+		"promotion-ready scope":   {Kind: pavedRoadKindEscape, Note: "Derive a PR's issue IDs and delivery base from ops state. No PR body."},
 		"promotion-stop":          {Kind: pavedRoadKindEscape, Note: "Jidoka tree-scoped stop clear (ADR 0026). Land/sweep trips; clear needs a root-cause note."},
 		"promotion-stop clear":    {Kind: pavedRoadKindEscape, Note: "Clear a jidoka stop after recording a root-cause note."},
 		"tui":                     {Kind: pavedRoadKindEscape, Note: "Interactive kanban. Agents use list, ready, and show."},

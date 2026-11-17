@@ -94,12 +94,31 @@ func TestGateRunMarksCIUnderGitHubActions_REQ_480(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{"full": {"true"}})
 	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_RUN_ID", "4242")
+	t.Setenv("GITHUB_REPOSITORY", "scullxbones/armature")
 
 	_, err := runTrls(t, repo, "gate", "run", "full")
 	require.NoError(t, err)
 
 	ev := requireOneGateEvidence(t, repo)
-	assert.True(t, ev.CI, "GITHUB_ACTIONS must mark gate evidence as CI")
+	assert.True(t, ev.CI, "Actions trio must mark gate evidence as CI")
+	assert.Equal(t, "4242", ev.ActionsRunID)
+	assert.Equal(t, "scullxbones/armature", ev.ActionsRepository)
+}
+
+func TestGateRunIgnoresBareGitHubActions_REQ_480(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{"full": {"true"}})
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_RUN_ID", "")
+	t.Setenv("GITHUB_REPOSITORY", "")
+
+	_, err := runTrls(t, repo, "gate", "run", "full")
+	require.NoError(t, err)
+
+	ev := requireOneGateEvidence(t, repo)
+	assert.False(t, ev.CI, "GITHUB_ACTIONS alone must not mark gate evidence as CI")
+	assert.Empty(t, ev.ActionsRunID)
 }
 
 func promotionReadyFixture(t *testing.T) (repo, base, tip string) {

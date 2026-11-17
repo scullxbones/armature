@@ -724,18 +724,20 @@ func gitRevParse(t *testing.T, repo string) string {
 }
 
 type gateEvidenceJSON struct {
-	Profile     string   `json:"profile"`
-	Command     []string `json:"command"`
-	HeadSHA     string   `json:"head_sha"`
-	Start       int64    `json:"start"`
-	End         int64    `json:"end"`
-	Exit        int      `json:"exit"`
-	Uncommitted bool     `json:"uncommitted"`
-	CI          bool     `json:"ci"`
-	OutputHash  string   `json:"output_hash"`
-	OutputHead  string   `json:"output_head"`
-	OutputTail  string   `json:"output_tail"`
-	LogPath     string   `json:"log_path"`
+	Profile           string   `json:"profile"`
+	Command           []string `json:"command"`
+	HeadSHA           string   `json:"head_sha"`
+	Start             int64    `json:"start"`
+	End               int64    `json:"end"`
+	Exit              int      `json:"exit"`
+	Uncommitted       bool     `json:"uncommitted"`
+	CI                bool     `json:"ci"`
+	ActionsRunID      string   `json:"actions_run_id"`
+	ActionsRepository string   `json:"actions_repository"`
+	OutputHash        string   `json:"output_hash"`
+	OutputHead        string   `json:"output_head"`
+	OutputTail        string   `json:"output_tail"`
+	LogPath           string   `json:"log_path"`
 }
 
 func requireOneGateEvidence(t *testing.T, repo string) gateEvidenceJSON {

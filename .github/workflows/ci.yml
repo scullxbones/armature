@@ -431,6 +431,10 @@ jobs:
         run: bash scripts/quickstart_check.sh
 
   # ADR 0026 N1 poka-yoke (#480): verify-only promotion-ready check name.
+  # Job id is the check name. Do not set `name:`.
+  # pull_request GITHUB_SHA is the synthetic merge commit. Bind the job to
+  # github.event.pull_request.head.sha (the delivery tip). On push, head.sha
+  # is empty and github.sha is the commit that was pushed; the script reports N/A.
   promotion-ready:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
@@ -440,6 +444,8 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
@@ -456,7 +462,11 @@ jobs:
       - name: Build arm binary
         run: make build
 
-      - name: Prove promotion-ready verify path
+      - name: Evaluate promotion-ready for this pull request
+        env:
+          PROMOTION_HEAD: ${{ github.event.pull_request.head.sha }}
+          PROMOTION_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PROMOTION_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: bash scripts/promotion-ready-ci.sh
 
   # ADR 0026 N1 (#481): hermetic arm land --pr fixture proof (post-merge

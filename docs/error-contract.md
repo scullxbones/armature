@@ -73,7 +73,7 @@ stay on the platform/git protocol.
 | `NOTE-1` | note | `arm note` could not complete. | LNGHZN-S6-T5 | |
 | `OPS-BACKUP-1` | ops-backup | `arm ops-backup` snapshot, verify, or restore-plan could not complete (including fail-closed tip refresh). | TOPTIER-S12-T1 | |
 | `OPS-BACKUP-2` | ops-backup | Reserved. `restore-plan` diverge emits the plan envelope (disposition + escalation help) and exits non-zero via ADR 0020 §7 (`skipCommandFailure`); it does not emit this Command Failure on the wire. | TOPTIER-S12-T1 | |
-| `PROMOTION-READY-1` | promotion-ready | `arm promotion-ready` refused the delivery (unknown scope, empty contract, missing CI full gate evidence at head, no assessment keyed by `(base, tip)`, or an active jidoka tree stop covering a scoped ID). Verify-only; never authors assessments. | 480 | |
+| `PROMOTION-READY-1` | promotion-ready | `arm promotion-ready` refused the delivery (unknown scope, empty contract, missing CI full gate evidence at head, evidence from a different Actions run when `--actions-run-id` is set, no assessment keyed by `(base, tip)`, a done tip in the PR range with no recorded base, or an active jidoka tree stop covering a scoped ID). Verify-only; never authors assessments. | 480 | |
 | `PROMOTION-STOP-1` | promotion-stop | `arm promotion-stop clear` could not complete (no active stop covers the issue, snapshot/ops load failed, or append failed). Clearing requires a non-empty root-cause `--msg`. | 482 | |
 | `PUSH-OPS-1` | push-ops | `arm push-ops` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-2` | push-ops | `arm push-ops` refused to publish because the graph failed `arm validate --ci` / `make validate-graph` after integrating `origin/_armature`. | PUBLISH-VALIDATE | |

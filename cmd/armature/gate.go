@@ -163,19 +163,22 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 	}
 	outputHead, outputTail := gateOutputExcerpt(logBytes)
 
+	ci, actionsRunID, actionsRepo := observeActionsCI(envFrom(cmd))
 	ev := ops.GateEvidence{
-		Profile:     profile,
-		Command:     append([]string(nil), gate.Command...),
-		HeadSHA:     headSHA,
-		Start:       start,
-		End:         end,
-		Exit:        exit,
-		Uncommitted: uncommitted,
-		CI:          envLookup(envFrom(cmd), "GITHUB_ACTIONS") == "true",
-		OutputHash:  hex.EncodeToString(sha256Sum(logBytes)),
-		OutputHead:  outputHead,
-		OutputTail:  outputTail,
-		LogPath:     absLog,
+		Profile:           profile,
+		Command:           append([]string(nil), gate.Command...),
+		HeadSHA:           headSHA,
+		Start:             start,
+		End:               end,
+		Exit:              exit,
+		Uncommitted:       uncommitted,
+		CI:                ci,
+		ActionsRunID:      actionsRunID,
+		ActionsRepository: actionsRepo,
+		OutputHash:        hex.EncodeToString(sha256Sum(logBytes)),
+		OutputHead:        outputHead,
+		OutputTail:        outputTail,
+		LogPath:           absLog,
 	}
 
 	var gc ops.GitCommitter
@@ -199,6 +202,27 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		return skipCommandFailure(fmt.Errorf("gate %s exited %d: %w", profile, exit, runErr))
 	}
 	return nil
+}
+
+// observeActionsCI reports whether this process is a GitHub Actions run.
+// ci=true requires GITHUB_ACTIONS=true and non-empty GITHUB_RUN_ID and
+// GITHUB_REPOSITORY. A lone GITHUB_ACTIONS=true does not record CI evidence.
+// The runner sets the trio; the promotion-ready job does not take them from
+// the PR. A local process that exports the same variables can still set the
+// flag, which is why the CI job also binds --actions-run-id.
+func observeActionsCI(env Env) (ci bool, runID, repo string) {
+	if envLookup(env, "GITHUB_ACTIONS") != "true" {
+		return false, "", ""
+	}
+	runID = strings.TrimSpace(envLookup(env, "GITHUB_RUN_ID"))
+	repo = strings.TrimSpace(envLookup(env, "GITHUB_REPOSITORY"))
+	if runID == "" || repo == "" {
+		return false, "", ""
+	}
+	if strings.ContainsAny(runID, " \t\r\n") || strings.ContainsAny(repo, " \t\r\n") {
+		return false, "", ""
+	}
+	return true, runID, repo
 }
 
 // gateTreeUncommitted reports whether the invoking checkout has non-ignored

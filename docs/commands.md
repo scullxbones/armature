@@ -570,7 +570,7 @@ Run a repository-configured quality-gate profile and record wrapper-observed evi
 
 ### gate run
 
-Execute the command declared for `<profile>` in the blob at `HEAD:gates.json` of the invoking checkout (`--repo` or the current directory — not the parent repo `ResolveContext` walks to, not the ops worktree, not `.armature/config.json`, and not the worktree file, which skip-worktree can hide). Stream stdout/stderr to a log file under `.armature/gates/`, and append a `gate-evidence` op to the invoking worker's own log (`profile`, `command`, `head_sha`, `start`, `end`, `exit`, `uncommitted`, `ci`, `output_hash`, `output_head`, `output_tail`, `log_path`). Profile name `full` is reserved as the publish profile. A working tree that is dirty before the command, or that the command dirties, still executes but records the run as `uncommitted` (not citable). When `GITHUB_ACTIONS=true`, the op records `ci=true` so promotion-ready can require CI-only evidence (ADR 0026). Repos with no `HEAD:gates.json` (or an empty map) get a clear error — armature does not infer make or Go. A porcelain `!!` path is exempt only when `git check-ignore -v --no-index` names a source that is a tracked file at HEAD (typically a committed `.gitignore`). `.git/info/exclude`, `core.excludesFile`, and XDG/global gitignore never appear in `Delivery.Diff` and mark the run `uncommitted`. The dirty check recurses into populated submodules with `--ignore-submodules=none --untracked-files=all`. A gitlink directory that has files but no `.git` is dirty. skip-worktree and assume-unchanged (`git ls-files -v` tags `S` or lowercase) are walked in the superproject and populated submodules. The gate git client pins `--work-tree` / `--git-dir` from the filesystem `.git` so `GIT_WORK_TREE`, `GIT_DIR`, and `core.worktree` cannot point the check at a clean export.
+Execute the command declared for `<profile>` in the blob at `HEAD:gates.json` of the invoking checkout (`--repo` or the current directory — not the parent repo `ResolveContext` walks to, not the ops worktree, not `.armature/config.json`, and not the worktree file, which skip-worktree can hide). Stream stdout/stderr to a log file under `.armature/gates/`, and append a `gate-evidence` op to the invoking worker's own log (`profile`, `command`, `head_sha`, `start`, `end`, `exit`, `uncommitted`, `ci`, `output_hash`, `output_head`, `output_tail`, `log_path`). Profile name `full` is reserved as the publish profile. A working tree that is dirty before the command, or that the command dirties, still executes but records the run as `uncommitted` (not citable). The op records `ci=true` only when `GITHUB_ACTIONS=true` and both `GITHUB_RUN_ID` and `GITHUB_REPOSITORY` are non-empty, and then also stores `actions_run_id` and `actions_repository`. A lone `GITHUB_ACTIONS=true` stays `ci=false`. `PromotionReadyEvidence` is still citable + `ci` + `profile=full` + matching head; it does not read the run id. The promotion-ready CI job passes `--actions-run-id` so a pre-seeded op from another run does not satisfy that job (ADR 0026). Repos with no `HEAD:gates.json` (or an empty map) get a clear error — armature does not infer make or Go. A porcelain `!!` path is exempt only when `git check-ignore -v --no-index` names a source that is a tracked file at HEAD (typically a committed `.gitignore`). `.git/info/exclude`, `core.excludesFile`, and XDG/global gitignore never appear in `Delivery.Diff` and mark the run `uncommitted`. The dirty check recurses into populated submodules with `--ignore-submodules=none --untracked-files=all`. A gitlink directory that has files but no `.git` is dirty. skip-worktree and assume-unchanged (`git ls-files -v` tags `S` or lowercase) are walked in the superproject and populated submodules. The gate git client pins `--work-tree` / `--git-dir` from the filesystem `.git` so `GIT_WORK_TREE`, `GIT_DIR`, and `core.worktree` cannot point the check at a clean export.
 
 **Synopsis:**
 `arm gate run <profile>`
@@ -588,12 +588,13 @@ arm gate run fast
 Verify-only pre-merge poka-yoke for ID-scoped deliveries (ADR 0026 N1). Does not author assessments and does not call a model.
 
 **Synopsis:**
-`arm promotion-ready --issue <id> [--issue <id> ...] --base <sha> --head <sha>`
+`arm promotion-ready --issue <id> [--issue <id> ...] --base <sha> --head <sha> [--actions-run-id <id>]`
 
 **Flags:**
 - `--issue stringArray`: Issue ID to verify (repeatable; required).
 - `--base string`: Delivery base SHA (required).
 - `--head string`: Delivery tip / current head SHA (required).
+- `--actions-run-id string`: When set, R2 evidence must also carry this GitHub Actions run id. `PromotionReadyEvidence` itself is unchanged.
 
 **Behavior:**
 - (R4) Unknown scope IDs and empty contracts (missing/blank DoD or empty acceptance) fail.
@@ -604,6 +605,29 @@ Verify-only pre-merge poka-yoke for ID-scoped deliveries (ADR 0026 N1). Does not
 **Example:**
 ```bash
 arm promotion-ready --issue task-01 --base "$BASE" --head "$HEAD"
+```
+
+### promotion-ready scope
+
+Derive the `--issue` IDs and `--base` values for a pull request from ops state. Does not read the PR body.
+
+A done leaf (no children) is in the delivery when its recorded tip is an ancestor of `--head`, including `--head` itself, and is not an ancestor of `--boundary`. `--boundary` is the pull request base SHA (`github.event.pull_request.base.sha`). A tip object that is not in this clone is outside the range. `--base` is the leaf's recorded delivery base. Leaves that share a base are one delivery. A tip in range with no recorded base fails `PROMOTION-READY-1`.
+
+`kind=no-scope` means `arm land` has no done leaf to promote from this range, so a pass does not waive R2/R3/R4 for a delivery. `stacked=true` when `--boundary-ref` is not the integration branch. Pass/fail is still R2/R3/R4 on each recorded delivery base at this head. A parent-branch tip is an ancestor of the PR base SHA and is not this PR's delivery.
+
+Normative order: the head commit exists, `arm review record` writes the assessment for that exact `(base, head)`, `arm push-ops` publishes it, then the branch is pushed. The CI job refetches `_armature` until the assessments are present or `PROMOTION_OPS_WAIT_SECONDS` (default 45) elapses. It does not refetch after `arm gate run full`.
+
+**Synopsis:**
+`arm promotion-ready scope --head <sha> --boundary <sha> [--boundary-ref <name>]`
+
+**Flags:**
+- `--head string`: Pull request head SHA (required).
+- `--boundary string`: Pull request base SHA (required).
+- `--boundary-ref string`: Pull request base ref name.
+
+**Example:**
+```bash
+arm promotion-ready scope --head "$HEAD" --boundary "$BASE_SHA" --boundary-ref main
 ```
 
 ---

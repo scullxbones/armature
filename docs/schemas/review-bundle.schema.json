@@ -182,7 +182,15 @@
           },
           "ci": {
             "type": "boolean",
-            "description": "True when the wrapper recorded the run under GitHub Actions (ADR 0026 promotion-ready R2)"
+            "description": "True when the wrapper observed GITHUB_ACTIONS=true plus non-empty GITHUB_RUN_ID and GITHUB_REPOSITORY (ADR 0026 promotion-ready R2). A lone GITHUB_ACTIONS=true stays false."
+          },
+          "actions_run_id": {
+            "type": "string",
+            "description": "GITHUB_RUN_ID when ci is true. PromotionReadyEvidence does not read this field; the CI job passes it as --actions-run-id."
+          },
+          "actions_repository": {
+            "type": "string",
+            "description": "GITHUB_REPOSITORY when ci is true."
           },
           "output_hash": {
             "type": "string",

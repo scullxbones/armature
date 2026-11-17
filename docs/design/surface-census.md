@@ -203,8 +203,9 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `hook` | main.go:255, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
 | `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |
 | `gate` | main.go, gate.go | Run configured quality-gate profiles | **kept-evidence** | Container for `gate run`. Profiles come from `.armature/config.json` `gates` map; `full` is reserved as the publish profile. |
-| `gate run` | gate.go | Execute a named gate profile and append evidence | **kept-evidence** | Subcommand of `gate`. Runs in the invoking checkout. Streams output to `.armature/gates/` and appends a `gate-evidence` op to the invoking worker log. Trees dirty before or after the command record `uncommitted` (not citable). CI sets `ci=true` under `GITHUB_ACTIONS`. |
-| `promotion-ready` | main.go, promotion_ready.go | Verify-only pre-merge poka-yoke (ADR 0026 N1) | **kept-evidence** | Flags: `--issue` (repeatable), `--base`, `--head`. Refuses empty contract / unknown scope (R4), missing CI full gate evidence at head (R2), assessments not keyed by delivery `(base, tip)` for that head (R3), and active jidoka tree stops covering a scoped ID. Never authors assessments. |
+| `gate run` | gate.go | Execute a named gate profile and append evidence | **kept-evidence** | Subcommand of `gate`. Runs in the invoking checkout. Streams output to `.armature/gates/` and appends a `gate-evidence` op to the invoking worker log. Trees dirty before or after the command record `uncommitted` (not citable). `ci=true` only when `GITHUB_ACTIONS=true` and both `GITHUB_RUN_ID` and `GITHUB_REPOSITORY` are non-empty. |
+| `promotion-ready` | main.go, promotion_ready.go | Verify-only pre-merge poka-yoke (ADR 0026 N1) | **kept-evidence** | Flags: `--issue` (repeatable), `--base`, `--head`, `--actions-run-id`. Refuses empty contract / unknown scope (R4), missing CI full gate evidence at head (R2), assessments not keyed by delivery `(base, tip)` for that head (R3), and active jidoka tree stops covering a scoped ID. `--actions-run-id` also requires that evidence's `actions_run_id`. Never authors assessments. Visible child `scope` makes this group help for output-mode enumeration; the verify invocation still prints a human ok line. |
+| `promotion-ready scope` | promotion_ready.go | Derive a PR's issue IDs and delivery base from ops state | **kept-evidence** | Flags: `--head`, `--boundary`, `--boundary-ref`. Done leaves whose tip is in `--boundary`..`--head`. No PR body. |
 | `promotion-stop` | main.go, jidoka.go | Jidoka tree-scoped promotion stop (ADR 0026) | **kept-evidence** | Container for `promotion-stop clear`. Land/sweep trips; clear requires root-cause note. |
 | `promotion-stop clear` | jidoka.go | Clear a jidoka stop with a root-cause note | **kept-evidence** | Flags: `--issue`, `--msg` (required). Writes note + clear op on the tree root. |
 | `land` | main.go, land.go | Post-merge apply for PR N (ADR 0026 N1) | **kept-evidence** | Flags: `--pr` (required), `--dry-run`. Fetches `refs/pull/N/head` (R1); applies stored done+attestation via ADR 0022 matcher; records squash SHA as `matched_commit`. On drift, arms tree-scoped jidoka stop + one andon issue. |
@@ -370,7 +371,10 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--assessment` | review record, review validate | string | Assessment file or '-' for stdin | **kept-evidence** |
 | `--bundle` | review record, review validate | string | Review bundle file path (required for review validate; optional for review record) | **kept-evidence** |
 | `--base` | review prepare | string | Base revision for review diff (also owned by transition / delivery record for delivery snapshots; see Workflow Flags) | **kept-evidence** |
-| `--head` | review prepare, promotion-ready | string | Head revision for diff / delivery tip for promotion-ready | **kept-evidence** |
+| `--head` | review prepare, promotion-ready, promotion-ready scope | string | Head revision for diff / delivery tip for promotion-ready; PR head for scope | **kept-evidence** |
+| `--actions-run-id` | promotion-ready | string | When set, R2 evidence must carry this GitHub Actions run id. PromotionReadyEvidence is unchanged | **kept-evidence** |
+| `--boundary` | promotion-ready scope | string | PR base SHA. Done tips that are ancestors of it are outside the delivery | **kept-evidence** |
+| `--boundary-ref` | promotion-ready scope | string | PR base ref name. Different from the integration branch means a stacked PR | **kept-evidence** |
 | `--clear-context-files` | amend | bool | Remove all context_files entries | **kept-evidence** |
 
 ## Priority Levels (on priority field)
@@ -465,7 +469,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `doctor` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `doctor quarantine` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Hidden leaf. N9 default: agent-facing envelope. |
 | `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
-| `promotion-ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Verify-only; human ok line today. |
+| `promotion-ready scope` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Human scope lines today. Parent `promotion-ready` is group help because this child is visible; the verify invocation still prints a human ok line. |
 | `promotion-stop clear` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Clear requires `--msg` root-cause. |
 | `land` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Same sync-shaped rows; `--dry-run` writes nothing. |
 | `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Protocol Output (with `mcp`). `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
