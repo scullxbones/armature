@@ -2917,9 +2917,6 @@ func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.
 	require.Error(t, fetchErr)
 }
 
-// TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G: kill -9 leaves
-// refs/armature-tmp/<nonce>/; next run sweeps leaseless leftovers and never
-// deletes a concurrently live (leased) nonce.
 func TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
@@ -3141,7 +3138,6 @@ func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testin
 	require.NoError(t, err)
 	require.Equal(t, mainCommon, wtCommon, "linked worktrees must share a common git dir")
 
-	// Worktree-private absolute-git-dir differs from common — the pre-fix bug.
 	wtAbs := strings.TrimSpace(runGitOutput(t, wt, "rev-parse", "--absolute-git-dir"))
 	require.NotEqual(t, wtAbs, mainCommon, "worktree private git dir must differ from common")
 
@@ -3160,7 +3156,6 @@ func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testin
 	assert.Equal(t, tip, runGitOutput(t, wt, "rev-parse", peerRef))
 	assert.NotEqual(t, liveRef, peerRef)
 
-	// Lease file must sit under the common dir (not the worktree-private git dir).
 	nonce := strings.TrimPrefix(liveRef, "refs/remotes/origin/_armature-run/")
 	leaseUnderCommon := filepath.Join(mainCommon, "armature-run-leases", "origin-run", nonce)
 	_, err = os.Stat(leaseUnderCommon)
