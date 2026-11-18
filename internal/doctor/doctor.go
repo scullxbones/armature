@@ -401,15 +401,12 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 func blockedByOnlyDAGNodes(index materialize.Index) map[string]*dag.Node {
 	nodes := make(map[string]*dag.Node)
 	for id, entry := range index {
-		blockedBy := make([]string, len(entry.BlockedBy))
-		copy(blockedBy, entry.BlockedBy)
 		nodes[id] = &dag.Node{
 			ID:        id,
 			Title:     entry.Title,
 			Type:      entry.Type,
 			Parent:    entry.Parent,
-			Children:  nil,
-			BlockedBy: blockedBy,
+			BlockedBy: entry.BlockedBy,
 			Blocks:    entry.Blocks,
 		}
 	}

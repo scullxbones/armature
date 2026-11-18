@@ -32,8 +32,8 @@ func graphNode(id, title, typ, parent string, children, blockedBy, blocks []stri
 		Title:     title,
 		Type:      typ,
 		Parent:    parent,
-		Children:  append([]string(nil), children...),
-		BlockedBy: append([]string(nil), blockedBy...),
-		Blocks:    append([]string(nil), blocks...),
+		Children:  children,
+		BlockedBy: blockedBy,
+		Blocks:    blocks,
 	}
 }

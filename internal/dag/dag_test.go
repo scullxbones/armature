@@ -515,6 +515,44 @@ func TestFromIndexBasic(t *testing.T) {
 	assert.ElementsMatch(t, []string{"story-1", "task-1"}, descendants)
 }
 
+func TestFromIndexDoesNotAliasCallerEdges(t *testing.T) {
+	t.Parallel()
+	children := []string{"child"}
+	blockedBy := []string{"blocker"}
+	blocks := []string{"downstream"}
+	node := &Node{
+		ID:        "n",
+		Title:     "Original",
+		Type:      "task",
+		Children:  children,
+		BlockedBy: blockedBy,
+		Blocks:    blocks,
+	}
+	emptyNode := &Node{ID: "empty", Type: "task", Children: []string{}}
+
+	g := FromIndex(map[string]*Node{"n": node, "empty": emptyNode})
+
+	children[0] = "mutated-child"
+	blockedBy[0] = "mutated-blocker"
+	blocks[0] = "mutated-downstream"
+	node.Title = "mutated-title"
+
+	_, gotChildren := g.Hierarchy("n")
+	assert.Equal(t, []string{"child"}, gotChildren)
+	assert.Equal(t, []string{"blocker"}, g.blockers("n"))
+	stored := g.nodes["n"]
+	assert.Equal(t, []string{"downstream"}, stored.Blocks)
+	assert.Equal(t, "Original", stored.Title)
+	assert.NotNil(t, g.nodes["empty"].Children)
+	assert.Empty(t, g.nodes["empty"].Children)
+
+	nilNode := &Node{ID: "nil-edges", Type: "task"}
+	nilGraph := FromIndex(map[string]*Node{"nil-edges": nilNode})
+	assert.Nil(t, nilGraph.nodes["nil-edges"].Children)
+	assert.Nil(t, nilGraph.nodes["nil-edges"].BlockedBy)
+	assert.Nil(t, nilGraph.nodes["nil-edges"].Blocks)
+}
+
 func TestFromIndexEmpty(t *testing.T) {
 	t.Parallel()
 	index := make(map[string]*Node)
