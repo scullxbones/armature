@@ -234,10 +234,29 @@ func (g *Graph) parentOrStop(id string) (string, bool) {
 }
 
 // FromIndex constructs a Graph from a map of node IDs to Node pointers.
+// Each node is copied, including its edge slices, so later edits to the
+// caller's nodes do not change the graph.
 func FromIndex(index map[string]*Node) *Graph {
 	g := newGraph()
 	for _, node := range index {
-		g.nodes[node.ID] = node
+		g.nodes[node.ID] = copyNode(node)
 	}
 	return g
+}
+
+func copyNode(node *Node) *Node {
+	cloned := *node
+	cloned.Children = cloneIDs(node.Children)
+	cloned.BlockedBy = cloneIDs(node.BlockedBy)
+	cloned.Blocks = cloneIDs(node.Blocks)
+	return &cloned
+}
+
+func cloneIDs(ids []string) []string {
+	if ids == nil {
+		return nil
+	}
+	out := make([]string, len(ids))
+	copy(out, ids)
+	return out
 }

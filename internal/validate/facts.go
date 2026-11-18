@@ -55,9 +55,9 @@ func graphFromFacts(facts map[string]IssueFacts) *dag.Graph {
 			Title:     f.Title,
 			Type:      f.Type,
 			Parent:    f.Parent,
-			Children:  append([]string(nil), f.Children...),
-			BlockedBy: append([]string(nil), f.BlockedBy...),
-			Blocks:    append([]string(nil), f.Blocks...),
+			Children:  f.Children,
+			BlockedBy: f.BlockedBy,
+			Blocks:    f.Blocks,
 		}
 	}
 	return dag.FromIndex(nodeIndex)
