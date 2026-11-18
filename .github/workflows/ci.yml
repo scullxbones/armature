@@ -63,7 +63,7 @@ jobs:
 
       - name: Install Make (Windows)
         if: runner.os == 'Windows'
-        run: choco install make --version=4.4.1 --no-progress -y
+        run: bash scripts/install-windows-make.sh
 
       - name: Prefer python launcher on Windows
         if: runner.os == 'Windows'
