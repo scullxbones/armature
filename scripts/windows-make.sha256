@@ -1,0 +1,15 @@
+# GNU Make 4.4.1 for Windows (ezwinports build, without Guile).
+# Both archives contain the same make.exe. exe-sha256 is that file.
+# Archive lines: <sha256><two spaces><https url><two spaces><path inside the archive>
+#
+# Hashes checked against the live files on 2026-11-18:
+#   https://downloads.sourceforge.net/project/ezwinports/make-4.4.1-without-guile-w32-bin.zip
+#   https://community.chocolatey.org/api/v2/package/make/4.4.1
+# The zip hash is the one the Chocolatey make 4.4.1 package page records
+# (community.chocolatey.org/packages/make/4.4.1, "downloaded as follows",
+# 2023-05-23). That page's nupkg id 8b2dec73ed4c is the prefix of the nupkg
+# hash below. make.exe sha256 CC6DC291113D… on that page is the same exe.
+# exe-sha256: cc6dc291113dcbcc7735835acbfc23c52ed037e4e124ff2d7a0aeae6df563a9f
+# version: 4.4.1
+fb66a02b530f7466f6222ce53c0b602c5288e601547a034e4156a512dd895ee7  https://downloads.sourceforge.net/project/ezwinports/make-4.4.1-without-guile-w32-bin.zip  bin/make.exe
+8b2dec73ed4c84163c4a4f9bfe658553b1e3d1fdfa8930d2aa438e030ff21f9d  https://community.chocolatey.org/api/v2/package/make/4.4.1  tools/install/bin/make.exe
