@@ -2945,9 +2945,9 @@ func TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T
 	gittest.Git(t, repo, "update-ref", liveBundle, tip)
 	gittest.Git(t, repo, "update-ref", liveOrigin, tip)
 	t.Cleanup(func() {
-		_ = c.DeleteRef(liveBundle) //nolint:errcheck // best-effort live-nonce cleanup
-		_ = c.DeleteRef(liveOrigin) //nolint:errcheck // best-effort live-nonce cleanup
-		_ = os.Remove(leasePath)    //nolint:errcheck // best-effort lease cleanup
+		assert.NoError(t, c.DeleteRef(liveBundle))
+		assert.NoError(t, c.DeleteRef(liveOrigin))
+		assert.NoError(t, os.Remove(leasePath))
 	})
 
 	missing, originTip, recovered, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
@@ -3126,7 +3126,7 @@ func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testin
 	wt := filepath.Join(t.TempDir(), "linked-wt")
 	gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
 	t.Cleanup(func() {
-		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
+		assert.NoError(t, adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run())
 	})
 
 	mainClient := adapters.New(repo)
