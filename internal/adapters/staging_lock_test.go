@@ -32,7 +32,7 @@ func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.UpdateRef(peerRef, tip))
 
-	wrapperDir, enteredFIFO, continueFIFO := installOriginFetchGate(t)
+	wrapperDir, gate := installOriginFetchGate(t)
 	gated := c.WithEnviron([]string{"PATH=" + wrapperDir + string(os.PathListSeparator) + os.Getenv("PATH")}).
 		WithNetworkTimeout(15 * time.Second)
 
@@ -50,25 +50,7 @@ func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 		defer close(fetchDone)
 		fetchErr = gated.FetchBranchToRef("_armature", victimRef)
 	}()
-
-	enteredDone := make(chan error, 1)
-	go func() {
-		f, openErr := os.Open(enteredFIFO)
-		if openErr != nil {
-			enteredDone <- openErr
-			return
-		}
-		buf := make([]byte, 16)
-		_, readErr := f.Read(buf)
-		swallowErr(f.Close())
-		enteredDone <- readErr
-	}()
-	select {
-	case e := <-enteredDone:
-		require.NoError(t, e)
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for gated origin fetch to enter")
-	}
+	gate.waitEntered(t)
 
 	go func() {
 		defer close(peerReleaseDone)
@@ -87,11 +69,7 @@ func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 	}
 
 	close(allowFetch)
-	cont, err := os.OpenFile(continueFIFO, os.O_WRONLY, 0)
-	require.NoError(t, err)
-	_, err = cont.Write([]byte("go\n"))
-	require.NoError(t, err)
-	require.NoError(t, cont.Close())
+	gate.release(t)
 
 	<-fetchDone
 	<-peerReleaseDone
@@ -120,7 +98,7 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 	require.NoError(t, err)
 	require.NoError(t, c.UpdateRef(peerRef, tip))
 
-	wrapperDir, enteredFIFO, continueFIFO := installOriginFetchGate(t)
+	wrapperDir, gate := installOriginFetchGate(t)
 	gated := c.WithEnviron([]string{"PATH=" + wrapperDir + string(os.PathListSeparator) + os.Getenv("PATH")}).
 		WithNetworkTimeout(15 * time.Second)
 	bundle := filepath.Join(t.TempDir(), "seed.bundle")
@@ -136,25 +114,7 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 		defer close(restoreDone)
 		_, _, _, _, _, restoreErr = gated.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
 	}()
-
-	enteredDone := make(chan error, 1)
-	go func() {
-		f, openErr := os.Open(enteredFIFO)
-		if openErr != nil {
-			enteredDone <- openErr
-			return
-		}
-		buf := make([]byte, 16)
-		_, readErr := f.Read(buf)
-		swallowErr(f.Close())
-		enteredDone <- readErr
-	}()
-	select {
-	case e := <-enteredDone:
-		require.NoError(t, e)
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for gated origin fetch to enter")
-	}
+	gate.waitEntered(t)
 
 	go func() {
 		defer close(peerReleaseDone)
@@ -173,11 +133,7 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 	}
 
 	close(allowFetch)
-	cont, err := os.OpenFile(continueFIFO, os.O_WRONLY, 0)
-	require.NoError(t, err)
-	_, err = cont.Write([]byte("go\n"))
-	require.NoError(t, err)
-	require.NoError(t, cont.Close())
+	gate.release(t)
 
 	<-restoreDone
 	<-peerReleaseDone
@@ -187,15 +143,59 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 		"peer must not delete staging refs while victim RestoreEvidence holds the flock")
 }
 
-func installOriginFetchGate(t *testing.T) (wrapperDir, enteredFIFO, continueFIFO string) {
+// originFetchGate pauses the first git fetch of origin inside the wrapper.
+// Both FIFOs are opened O_RDWR in this process before that fetch is started.
+// A blocking O_RDONLY/O_WRONLY open races forks from FetchBranchToRef
+// (firstRemoteURL, then the fetch itself) and from other parallel tests.
+// On Darwin that open can fail to wake, so the child blocks in its own
+// open and the 10s gate never trips. O_RDWR returns immediately and holds
+// both ends, so the child's open/write does not wait on a later open here.
+type originFetchGate struct {
+	entered *os.File
+	cont    *os.File
+}
+
+func (g *originFetchGate) waitEntered(t *testing.T) {
+	t.Helper()
+	enteredDone := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 16)
+		_, readErr := g.entered.Read(buf)
+		enteredDone <- readErr
+	}()
+	select {
+	case err := <-enteredDone:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for gated origin fetch to enter")
+	}
+}
+
+func (g *originFetchGate) release(t *testing.T) {
+	t.Helper()
+	// Keep cont open. Closing the last writer before the child opens its
+	// read end drops the byte and the child blocks forever.
+	_, err := g.cont.Write([]byte("go\n"))
+	require.NoError(t, err)
+}
+
+func installOriginFetchGate(t *testing.T) (wrapperDir string, gate *originFetchGate) {
 	t.Helper()
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
 	gateDir := t.TempDir()
-	enteredFIFO = filepath.Join(gateDir, "entered")
-	continueFIFO = filepath.Join(gateDir, "continue")
+	enteredFIFO := filepath.Join(gateDir, "entered")
+	continueFIFO := filepath.Join(gateDir, "continue")
 	require.NoError(t, exec.CommandContext(t.Context(), "mkfifo", enteredFIFO).Run())
 	require.NoError(t, exec.CommandContext(t.Context(), "mkfifo", continueFIFO).Run())
+	entered, err := os.OpenFile(enteredFIFO, os.O_RDWR, 0)
+	require.NoError(t, err)
+	cont, err := os.OpenFile(continueFIFO, os.O_RDWR, 0)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		swallowErr(entered.Close())
+		swallowErr(cont.Close())
+	})
 
 	wrapperDir = t.TempDir()
 	script := fmt.Sprintf(`#!/bin/sh
@@ -214,11 +214,11 @@ if [ -n "$is_fetch" ] && [ -n "$seen_origin" ]; then
   if [ ! -f "$entered.tripped" ]; then
     : > "$entered.tripped"
     echo ready > "$entered"
-    cat "$cont" >/dev/null
+    read -r _ < "$cont" || exit 1
   fi
 fi
 exec "$real_git" "$@"
 `, realGit, enteredFIFO, continueFIFO)
 	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
-	return wrapperDir, enteredFIFO, continueFIFO
+	return wrapperDir, &originFetchGate{entered: entered, cont: cont}
 }
