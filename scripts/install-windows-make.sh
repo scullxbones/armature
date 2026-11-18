@@ -58,7 +58,14 @@ command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 [[ -f "$PIN_FILE" ]] || fail "pin file not found: $PIN_FILE"
 
 is_sha256() {
-    printf '%s\n' "$1" | grep -Eq '^[0-9a-f]{64}$'
+    local s="$1"
+    # File digests are SHA-256. Do not spell that as a hex-width regex;
+    # that shape is reserved for git object ids.
+    [[ ${#s} -eq 64 ]] || return 1
+    case "$s" in
+        *[!0-9a-f]*) return 1 ;;
+    esac
+    return 0
 }
 
 EXE_SHA=""

@@ -375,6 +375,35 @@ else
     pass "non-https source refused without a fetch"
 fi
 
+echo "Test 9b: a short or uppercase digest is refused before any fetch..."
+short="${EXE_SHA%?}"
+write_pin "$WORKDIR/pin-short" "$short  $URL_A  bin/make.exe"
+CURL_BIN=$(new_curl always-fail)
+run_install "$WORKDIR/pin-short" "$CURL_BIN" 2
+calls=$(wc -l < "$WORKDIR/curl-log" | tr -d ' ')
+if [[ "$RUN_STATUS" -eq 0 ]]; then
+    fail "short digest exited 0"
+elif [[ "$calls" -ne 0 ]]; then
+    fail "short digest was fetched"
+elif ! printf '%s\n' "$RUN_ERR" | grep -q 'archive sha256 is not 64 lowercase hex'; then
+    fail "missing short-digest error: $RUN_ERR"
+else
+    pass "short digest refused"
+fi
+upper=$(printf '%s\n' "$EXE_SHA" | tr '[:lower:]' '[:upper:]')
+write_pin "$WORKDIR/pin-upper" "$upper  $URL_A  bin/make.exe"
+run_install "$WORKDIR/pin-upper" "$CURL_BIN" 2
+calls=$(wc -l < "$WORKDIR/curl-log" | tr -d ' ')
+if [[ "$RUN_STATUS" -eq 0 ]]; then
+    fail "uppercase digest exited 0"
+elif [[ "$calls" -ne 0 ]]; then
+    fail "uppercase digest was fetched"
+elif ! printf '%s\n' "$RUN_ERR" | grep -q 'archive sha256 is not 64 lowercase hex'; then
+    fail "missing uppercase-digest error: $RUN_ERR"
+else
+    pass "uppercase digest refused"
+fi
+
 echo "Test 9: a non-positive attempt budget fails closed..."
 write_pin "$WORKDIR/pin-one" "$SHA_A  $URL_A  bin/make.exe"
 CURL_BIN=$(new_curl fail-once)
