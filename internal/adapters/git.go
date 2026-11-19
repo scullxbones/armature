@@ -1766,7 +1766,6 @@ func isGitObjectID(s string) bool {
 }
 
 func isCommitWalkHeader(raw []byte) bool {
-	// OID (40 hex SHA-1 or 64 hex SHA-256) TAB ...
 	switch {
 	case len(raw) > gitoid.LenSHA1 && raw[gitoid.LenSHA1] == '\t':
 		return isGitObjectID(string(raw[:gitoid.LenSHA1]))

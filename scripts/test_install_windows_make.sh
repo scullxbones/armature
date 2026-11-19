@@ -73,7 +73,6 @@ write_pin() {
 }
 
 new_curl() {
-    # $1 mode: fail-once | always-fail | bad-bytes | by-url
     local mode="$1"
     local curl_bin="$WORKDIR/curl-$mode"
     cat > "$curl_bin" <<EOF

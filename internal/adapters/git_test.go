@@ -3124,7 +3124,6 @@ func TestBundleCreate_WorkDirMkdirFail_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	// Make armature-tmp-work a file so MkdirAll of a child fails.
 	workRoot := filepath.Join(gitDir, "armature-tmp-work")
 	require.NoError(t, os.WriteFile(workRoot, []byte("not-a-dir"), 0o600))
-	t.Cleanup(func() { _ = os.Remove(workRoot) }) //nolint:errcheck // best-effort fixture cleanup
 	err := c.BundleCreateAdvertised(filepath.Join(t.TempDir(), "x.bundle"), tip, "refs/heads/_armature")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "temp bare")
@@ -3179,8 +3178,6 @@ func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testin
 	assert.True(t, os.IsNotExist(err), "lease must not live under worktree-private git dir")
 }
 
-// TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G: end-to-end
-// class proof — overlapping snapshot from two linked worktrees both succeed.
 func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 	// Defined in adapters_test so we can drive real adapters without importing opsbackup
@@ -3195,9 +3192,6 @@ func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testi
 
 	wt := filepath.Join(t.TempDir(), "ops-wt")
 	gittest.Git(t, repo, "worktree", "add", "-b", "ops-wt-branch", wt, "HEAD")
-	t.Cleanup(func() {
-		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
-	})
 
 	mainClient := adapters.New(repo)
 	wtClient := adapters.New(wt)
@@ -3259,8 +3253,6 @@ func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testi
 	assert.NotEqual(t, refs[0], refs[1])
 }
 
-// TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G: wt2
-// restore-plan must not delete live run A's refs/armature-tmp/<nonce>/bundle.
 func TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
@@ -3273,9 +3265,6 @@ func TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G(t *t
 
 	wt := filepath.Join(t.TempDir(), "restore-wt")
 	gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
-	t.Cleanup(func() {
-		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
-	})
 
 	mainClient := adapters.New(repo)
 	wtClient := adapters.New(wt)
@@ -3290,11 +3279,6 @@ func TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G(t *t
 	liveOrigin := "refs/armature-tmp/" + liveNonce + "/origin"
 	gittest.Git(t, repo, "update-ref", liveBundle, tip)
 	gittest.Git(t, repo, "update-ref", liveOrigin, tip)
-	t.Cleanup(func() {
-		_ = mainClient.DeleteRef(liveBundle) //nolint:errcheck // best-effort
-		_ = mainClient.DeleteRef(liveOrigin) //nolint:errcheck // best-effort
-		_ = os.Remove(leasePath)             //nolint:errcheck // best-effort
-	})
 
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, mainClient.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
@@ -3479,8 +3463,4 @@ func TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G(t *testing.
 	require.NoError(t, err, "fresh .tmp lease draft (live write) must be kept")
 	_, err = os.Stat(foreignAged)
 	require.NoError(t, err, "foreign aged .other.tmp must survive leaseTempName tighten")
-	t.Cleanup(func() {
-		_ = os.Remove(freshTmp)    //nolint:errcheck // best-effort
-		_ = os.Remove(foreignAged) //nolint:errcheck // best-effort
-	})
 }
