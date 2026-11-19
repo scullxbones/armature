@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -657,9 +658,7 @@ func TestCommitterUnixRange_MatchesPerSHA_REQ_TOPTIER_S12_T2(t *testing.T) {
 	shas := strings.Split(strings.TrimSpace(runGitOutput(t, repo, "rev-list", rangeSpec)), "\n")
 	require.Len(t, shas, 2)
 	for i, sha := range shas {
-		got, shaErr := c.CommitterUnix(sha)
-		require.NoError(t, shaErr)
-		assert.Equal(t, got, batched[i], "batched range must match per-SHA committer for %s", sha)
+		assert.Equal(t, committerUnix(t, repo, sha), batched[i], "batched range must match git log -1 committer for %s", sha)
 	}
 
 	empty, err := c.CommitterUnixRange(base + ".." + base)
@@ -689,8 +688,7 @@ func TestCommitWalkReverse_SHA256ObjectFormat_REQ_OPORDER_LOCATE(t *testing.T) {
 	assert.Len(t, walk[1].SHA, 64)
 	assert.Equal(t, walk[0].SHA, walk[1].FirstParent)
 
-	blobs, batchErr := c.ShowFilesBatch([]adapters.BlobRef{{Rev: walk[0].SHA, Path: "ops/worker.log"}})
-	require.NoError(t, batchErr)
+	blobs := readBlobBatch(t, c, []adapters.BlobRef{{Rev: walk[0].SHA, Path: "ops/worker.log"}})
 	require.Len(t, blobs, 1)
 	assert.True(t, blobs[0].OK)
 	assert.Equal(t, []byte("line\n"), blobs[0].Content)
@@ -724,9 +722,7 @@ func TestCommitWalkReverse_MatchesPerSHAHelpers_REQ_OPORDER_LOCATE(t *testing.T)
 	require.Equal(t, revSHAs, walkSHAs(walk), "walk order must match rev-list --reverse")
 
 	for _, e := range walk {
-		ct, ctErr := c.CommitterUnix(e.SHA)
-		require.NoError(t, ctErr)
-		assert.Equal(t, ct, e.CommitterUnix, "committer for %s", e.SHA)
+		assert.Equal(t, committerUnix(t, repo, e.SHA), e.CommitterUnix, "committer for %s", e.SHA)
 
 		parent, ok, pErr := c.FirstParent(e.SHA)
 		require.NoError(t, pErr)
@@ -992,7 +988,7 @@ func TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE(t *testing.T) 
 	}
 }
 
-func TestShowFilesBatch_MatchesShowFileAtCommit_REQ_OPORDER_LOCATE(t *testing.T) {
+func TestFilesBatchSession_MatchesShowFileAtCommit_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
 	for _, tc := range adversarialGitConfigs() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1016,8 +1012,7 @@ func TestShowFilesBatch_MatchesShowFileAtCommit_REQ_OPORDER_LOCATE(t *testing.T)
 				{Rev: shaB, Path: "ops/worker.log"},
 				{Rev: shaB, Path: "ops/missing.log"},
 			}
-			got, batchErr := c.ShowFilesBatch(refs)
-			require.NoError(t, batchErr)
+			got := readBlobBatch(t, c, refs)
 			require.Len(t, got, 3)
 			a, aErr := c.ShowFileAtCommit(shaA, "ops/worker.log")
 			require.NoError(t, aErr)
@@ -1038,6 +1033,33 @@ func runGitDir(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v: %s", args, out)
+}
+
+func committerUnix(t *testing.T, repo, sha string) int64 {
+	t.Helper()
+	n, err := strconv.ParseInt(runGitOutput(t, repo, "log", "-1", "--format=%ct", sha), 10, 64)
+	require.NoError(t, err)
+	return n
+}
+
+func readBlobBatch(t *testing.T, c *adapters.Client, refs []adapters.BlobRef) []adapters.BlobResult {
+	t.Helper()
+	sess, err := c.BeginFilesBatch()
+	require.NoError(t, err)
+	out := make([]adapters.BlobResult, len(refs))
+	var readErr error
+	for i, ref := range refs {
+		res, rerr := sess.Read(ref)
+		if rerr != nil {
+			readErr = rerr
+			break
+		}
+		out[i] = res
+	}
+	closeErr := sess.Close()
+	require.NoError(t, readErr)
+	require.NoError(t, closeErr)
+	return out
 }
 
 func runGitOutput(t *testing.T, dir string, args ...string) string {
@@ -1288,7 +1310,7 @@ func TestDiffNameStatus_DetectsRenameWithBothPaths(t *testing.T) {
 	gitRun("mv", "outside/a.go", "inside/a.go")
 	gitRun("commit", "-m", "rename outside to inside")
 
-	entries, err := c.DiffNameStatus(baseSHA)
+	entries, err := c.DiffNameStatusRange(baseSHA, "HEAD")
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.True(t, strings.HasPrefix(entries[0].Status, "R"), "expected rename status, got %q", entries[0].Status)
@@ -1322,7 +1344,7 @@ func TestDiffNameStatus_NonRenameChangesHaveNoOldPath(t *testing.T) {
 	gitRun("rm", "beta.txt")
 	gitRun("commit", "-m", "modify alpha, delete beta")
 
-	entries, err := c.DiffNameStatus(baseSHA)
+	entries, err := c.DiffNameStatusRange(baseSHA, "HEAD")
 	require.NoError(t, err)
 	byPath := map[string]adapters.DiffStatusEntry{}
 	for _, e := range entries {
@@ -1357,7 +1379,7 @@ func TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4(t *testing.T) {
 	gitRun("add", nonASCIIPath)
 	gitRun("commit", "-m", "add non-ascii file")
 
-	entries, err := c.DiffNameStatus(baseSHA)
+	entries, err := c.DiffNameStatusRange(baseSHA, "HEAD")
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, nonASCIIPath, entries[0].Path, "path must be the literal non-ASCII name, not git's octal-escaped quoted form")

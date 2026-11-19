@@ -1262,15 +1262,10 @@ type DiffStatusEntry struct {
 	OldPath string
 }
 
-// DiffNameStatus returns the list of file changes between the given base
-// commit and HEAD, with rename detection enabled (-M) so that renamed files
-// report BOTH their source and destination paths. This is important for scope
-// checks: `git diff --name-only` collapses a rename to only its destination
-// path, which can hide that the file's original location was out of scope.
-func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
-	return c.DiffNameStatusRange(baseSHA, "HEAD")
-}
-
+// DiffNameStatusRange returns file changes between baseSHA and head, with
+// rename detection enabled (-M) so renamed files report both source and
+// destination paths. Scope checks need that: `git diff --name-only` collapses
+// a rename to only its destination, which can hide an out-of-scope source.
 func (c *Client) DiffNameStatusRange(baseSHA, head string) ([]DiffStatusEntry, error) {
 	// -z switches git to NUL-delimited, unquoted output: without it, git
 	// quotes and octal-escapes any path containing non-ASCII or special
@@ -1494,19 +1489,6 @@ func (c *Client) RevListReverse(rev string) ([]string, error) {
 	return outputLines(out), nil
 }
 
-func (c *Client) CommitterUnix(sha string) (int64, error) {
-	cmd := c.cmd("log", "-1", "--format=%ct", sha)
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, fmt.Errorf("git log committer %s: %w", sha, err)
-	}
-	n, convErr := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
-	if convErr != nil {
-		return 0, fmt.Errorf("parse committer unix %s: %w", sha, convErr)
-	}
-	return n, nil
-}
-
 // CommitterUnixRange returns committer unix timestamps for every commit in
 // rangeSpec (e.g. "origin/_armature..HEAD") in one git process. Empty ranges
 // yield an empty slice, not an error. Order matches `git log` (newest first).
@@ -1550,13 +1532,13 @@ type CommitWalkEntry struct {
 	ChangedFiles  []string
 }
 
-// BlobRef names a tree path at a revision for ShowFilesBatch (`rev:path`).
+// BlobRef names a tree path at a revision for a cat-file batch Read (`rev:path`).
 type BlobRef struct {
 	Rev  string
 	Path string
 }
 
-// BlobResult is one ShowFilesBatch response. OK is false when the path is
+// BlobResult is one cat-file batch Read response. OK is false when the path is
 // missing at Rev (cat-file "missing"); that is not an error.
 type BlobResult struct {
 	Content []byte
@@ -1588,8 +1570,8 @@ func commitWalkConfigPins() []string {
 
 // CommitWalkReverse returns every commit reachable from rev, oldest first, in
 // one git process. FirstParent and ChangedFiles use first-parent merge diffs
-// so callers can replace per-SHA CommitterUnix, FirstParent, DiffNameOnlyRange,
-// and ListFilesAtCommit loops.
+// so callers can replace per-SHA committer, first-parent, name-only diff,
+// and ls-tree loops.
 //
 // Walk target is Git 2.34+: `--diff-merges=separate` (Git 2.31+) for
 // per-parent merge diffs, `--root` so log.showRoot=false still emits the
@@ -1691,33 +1673,6 @@ func (s *FilesBatchSession) Close() error {
 		return fmt.Errorf("git cat-file --batch: %w", err)
 	}
 	return nil
-}
-
-// ShowFilesBatch returns blob contents for each rev:path in one
-// `git cat-file --batch` process (Git 2.25+). Missing paths yield OK=false.
-// Prefer BeginFilesBatch/Read when snapshots must not all be retained.
-func (c *Client) ShowFilesBatch(refs []BlobRef) ([]BlobResult, error) {
-	out := make([]BlobResult, len(refs))
-	if len(refs) == 0 {
-		return out, nil
-	}
-	sess, err := c.BeginFilesBatch()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = sess.Close() }() //nolint:errcheck // results already read
-	for i, ref := range refs {
-		res, rerr := sess.Read(ref)
-		if rerr != nil {
-			_ = sess.Close() //nolint:errcheck
-			return nil, rerr
-		}
-		out[i] = res
-	}
-	if err := sess.Close(); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func readCatFileBatchItem(r *bufio.Reader) (BlobResult, error) {
