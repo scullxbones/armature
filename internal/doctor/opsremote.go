@@ -24,8 +24,8 @@ const (
 )
 
 // d11Git is the adapter surface D11 probes need. *adapters.Client satisfies it.
-// Kept local (not shared with opsbackup) so S12-T1G can keep moving without a
-// shared-package churn: D11 needs ahead/age classification beyond tip evidence.
+// Kept local, not shared with opsbackup, because D11 needs ahead/age
+// classification beyond tip evidence.
 // Age uses the same full remote..HEAD set as RevListCount (not first-parent),
 // collected in one CommitterUnixRange git process (not one git log -1 per SHA).
 type d11Git interface {
