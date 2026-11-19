@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 168,
+      "count": 165,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -30,7 +30,6 @@
         "Client.CommitWalkReverse",
         "Client.CommitWithMessage",
         "Client.CommitWorktreeOp",
-        "Client.CommitterUnix",
         "Client.CommitterUnixRange",
         "Client.CommonGitDir",
         "Client.CreateOrphanBranch",
@@ -38,7 +37,6 @@
         "Client.DeleteRef",
         "Client.DiffNameOnlyRange",
         "Client.DiffNameOnlyTwoDot",
-        "Client.DiffNameStatus",
         "Client.DiffNameStatusRange",
         "Client.DiffRange",
         "Client.DiffTwoDot",
@@ -76,7 +74,6 @@
         "Client.SetGitConfig",
         "Client.SetGitConfigWorktree",
         "Client.ShowFileAtCommit",
-        "Client.ShowFilesBatch",
         "Client.StablePatchID",
         "Client.StagedPaths",
         "Client.Toplevel",

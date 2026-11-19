@@ -27,7 +27,7 @@ const (
 // Kept local (not shared with opsbackup) so S12-T1G can keep moving without a
 // shared-package churn: D11 needs ahead/age classification beyond tip evidence.
 // Age uses the same full remote..HEAD set as RevListCount (not first-parent),
-// collected in one CommitterUnixRange git process (not per-SHA CommitterUnix).
+// collected in one CommitterUnixRange git process (not one git log -1 per SHA).
 type d11Git interface {
 	FetchBranchToRef(branch, dstRef string) error
 	ResolveRevision(rev string) (string, error)

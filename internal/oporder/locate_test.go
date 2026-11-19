@@ -124,8 +124,8 @@ func writeOpLog(t *testing.T, repo, rel string, log []ops.Op) {
 
 // TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE proves
 // locateByCommitWalk uses a flat git-process budget even as op-changing
-// commits grow (CommitWalkReverse + ancestor rev-lists + one ShowFilesBatch),
-// not per-SHA CommitterUnix/FirstParent/Diff/IsAncestor or per-file ShowFile.
+// commits grow (CommitWalkReverse + ancestor rev-lists + one BeginFilesBatch),
+// not per-SHA committer/first-parent/diff/ancestor or per-file ShowFile.
 func TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
 	countFor := func(nOpCommits int) (calls int, located []LocatedOp) {
 		t.Helper()
