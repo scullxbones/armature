@@ -130,6 +130,10 @@ func keepRecordedOffset(_, _ string, recorded int64) int64 {
 	return recorded
 }
 
+func skipLogReadError(err error) bool {
+	return err != nil
+}
+
 func runFileConcat(stateDir string, allOps []ops.Op,
 	byteOffsets map[string]int64, opts Options, lastCommitWorktree string) (*State, Result, error) {
 	issuesStateDir, cp, err := prepareWriteState(stateDir, opts.WriteStateFiles)
@@ -636,11 +640,9 @@ func ownedLogOps(worktree string, offsets map[string]int64, startAt func(dirRel,
 			if offsets != nil {
 				start = offsets[e.Name()]
 			}
-			if startAt != nil {
-				start = startAt(dir.rel, e.Name(), start)
-			}
+			start = startAt(dir.rel, e.Name(), start)
 			suffix, readErr := ops.ReadLogFromOffset(diskPath, start)
-			if readErr != nil {
+			if skipLogReadError(readErr) {
 				continue
 			}
 			for _, op := range suffix {
