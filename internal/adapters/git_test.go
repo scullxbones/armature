@@ -3121,7 +3121,6 @@ func TestBundleCreate_WorkDirMkdirFail_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
 	c := adapters.New(repo)
 	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
-	// Make armature-tmp-work a file so MkdirAll of a child fails.
 	workRoot := filepath.Join(gitDir, "armature-tmp-work")
 	require.NoError(t, os.WriteFile(workRoot, []byte("not-a-dir"), 0o600))
 	err := c.BundleCreateAdvertised(filepath.Join(t.TempDir(), "x.bundle"), tip, "refs/heads/_armature")
@@ -3180,8 +3179,6 @@ func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testin
 
 func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
-	// Defined in adapters_test so we can drive real adapters without importing opsbackup
-	// (opsbackup_test already covers same-clone overlap; this covers worktree visibility).
 	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
 	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")

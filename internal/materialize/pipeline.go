@@ -610,9 +610,6 @@ func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op
 	})
 }
 
-// ownedLogOps reads each worker log under the worktree. startAt replaces the
-// recorded byte offset; nil keeps that offset. A missing ops directory or an
-// unreadable log is skipped. Ops whose worker id does not own the file are dropped.
 func ownedLogOps(worktree string, offsets map[string]int64, startAt func(dirRel, name string, recorded int64) int64) ([]ops.Op, error) {
 	if worktree == "" {
 		return nil, nil
