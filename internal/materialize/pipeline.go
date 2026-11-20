@@ -126,6 +126,10 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 	return runFileConcat(stateDir, allOps, byteOffsets, opts, "")
 }
 
+func keepRecordedOffset(_, _ string, recorded int64) int64 {
+	return recorded
+}
+
 func runFileConcat(stateDir string, allOps []ops.Op,
 	byteOffsets map[string]int64, opts Options, lastCommitWorktree string) (*State, Result, error) {
 	issuesStateDir, cp, err := prepareWriteState(stateDir, opts.WriteStateFiles)
@@ -142,7 +146,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 	state.RetractDerivedPromotions()
 	applyOps := allOps
 	if !fullReplay && opts.OpsWorktree != "" {
-		delta, deltaErr := ownedLogOps(opts.OpsWorktree, cp.ByteOffsets, nil)
+		delta, deltaErr := ownedLogOps(opts.OpsWorktree, cp.ByteOffsets, keepRecordedOffset)
 		if deltaErr != nil {
 			return nil, Result{}, deltaErr
 		}
