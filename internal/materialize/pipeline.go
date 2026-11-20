@@ -142,7 +142,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 	state.RetractDerivedPromotions()
 	applyOps := allOps
 	if !fullReplay && opts.OpsWorktree != "" {
-		delta, deltaErr := worktreeOpsAfterOffsets(opts.OpsWorktree, cp.ByteOffsets)
+		delta, deltaErr := ownedLogOps(opts.OpsWorktree, cp.ByteOffsets, nil)
 		if deltaErr != nil {
 			return nil, Result{}, deltaErr
 		}
@@ -585,53 +585,37 @@ func committedLogBytes(gc *adapters.Client, head, name string) []byte {
 	return nil
 }
 
-func worktreeOpsAfterOffsets(worktree string, offsets map[string]int64) ([]ops.Op, error) {
-	if worktree == "" {
-		return nil, nil
-	}
-	if offsets == nil {
-		offsets = map[string]int64{}
-	}
-	var extra []ops.Op
-	for _, dir := range worktreeOpsLogDirs(worktree) {
-		entries, readErr := os.ReadDir(dir.abs)
-		if readErr != nil {
-			if os.IsNotExist(readErr) {
-				continue
-			}
-			return nil, readErr
-		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
-				continue
-			}
-			start := offsets[e.Name()]
-			suffix, readErr := ops.ReadLogFromOffset(filepath.Join(dir.abs, e.Name()), start)
-			if readErr != nil {
-				continue
-			}
-			for _, op := range suffix {
-				if !ops.WorkerOwnsLog(op.WorkerID, e.Name()) {
-					continue
-				}
-				extra = append(extra, op)
-			}
-		}
-	}
-	return extra, nil
-}
-
 func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op, error) {
 	if worktree == "" {
 		return nil, nil
-	}
-	if offsets == nil {
-		offsets = map[string]int64{}
 	}
 	gc := adapters.New(worktree)
 	head, err := gc.HeadSHA()
 	if err != nil {
 		return nil, fmt.Errorf("ops HEAD: %w", err)
+	}
+	return ownedLogOps(worktree, offsets, func(dirRel, name string, recorded int64) int64 {
+		committed, showErr := gc.ShowFileAtCommit(head, dirRel+"/"+name)
+		if showErr != nil {
+			alt, altErr := gc.ShowFileAtCommit(head, "ops/"+name)
+			if altErr == nil {
+				committed = alt
+			}
+		}
+		start := int64(len(committed))
+		if recorded > start {
+			start = recorded
+		}
+		return start
+	})
+}
+
+// ownedLogOps reads each worker log under the worktree. startAt replaces the
+// recorded byte offset; nil keeps that offset. A missing ops directory or an
+// unreadable log is skipped. Ops whose worker id does not own the file are dropped.
+func ownedLogOps(worktree string, offsets map[string]int64, startAt func(dirRel, name string, recorded int64) int64) ([]ops.Op, error) {
+	if worktree == "" {
+		return nil, nil
 	}
 	var extra []ops.Op
 	for _, dir := range worktreeOpsLogDirs(worktree) {
@@ -647,17 +631,12 @@ func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op
 				continue
 			}
 			diskPath := filepath.Join(dir.abs, e.Name())
-			rel := dir.rel + "/" + e.Name()
-			committed, showErr := gc.ShowFileAtCommit(head, rel)
-			if showErr != nil {
-				alt, altErr := gc.ShowFileAtCommit(head, "ops/"+e.Name())
-				if altErr == nil {
-					committed = alt
-				}
+			start := int64(0)
+			if offsets != nil {
+				start = offsets[e.Name()]
 			}
-			start := int64(len(committed))
-			if off := offsets[e.Name()]; off > start {
-				start = off
+			if startAt != nil {
+				start = startAt(dir.rel, e.Name(), start)
 			}
 			suffix, readErr := ops.ReadLogFromOffset(diskPath, start)
 			if readErr != nil {
