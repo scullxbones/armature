@@ -3177,7 +3177,7 @@ func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testin
 	assert.True(t, os.IsNotExist(err), "lease must not live under worktree-private git dir")
 }
 
-func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testing.T) {
+func TestBeginPerRunRef_LinkedWorktreeConcurrentFetch_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
