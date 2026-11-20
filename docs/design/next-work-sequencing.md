@@ -1,6 +1,6 @@
 # Next-Work Sequencing
 
-**Date:** 2026-11-16. 1.0 scope is [ADR 0026](../adr/0026-armature-1-0-scope-keep-kill-defer.md), from the 15 November 2026 re-groom. No named successor release yet. The 1.0 cut is the end of Phase 4, not a version number invented here.
+**Date:** 2026-11-19. 1.0 scope is [ADR 0026](../adr/0026-armature-1-0-scope-keep-kill-defer.md), from the 15 November 2026 re-groom. No named successor release yet. The 1.0 cut is the end of Phase 4, not a version number invented here.
 
 **Closed history:** Tier S, the Tier A feature spine, delivered pull-ins, the 2026-09-18 recommended sequence, and the F2 grilling decisions are in [`docs/archive/next-work-sequencing-closed-through-2026-09-27.md`](../archive/next-work-sequencing-closed-through-2026-09-27.md). v0.1.0 cut and post-cut leftover deliveries are in [`docs/archive/next-work-sequencing-closed-v010.md`](../archive/next-work-sequencing-closed-v010.md). S12 ops-backup / D11 / D14 and CLAIMORD-W21 product delivery are in [`docs/archive/next-work-sequencing-closed-s12-w21.md`](../archive/next-work-sequencing-closed-s12-w21.md). Item 24's T4 trailer (doctor **D13**), item 28a (`HOSTREF-S1`), and item 28b (`MCPSTDIO-S1`) are in [`docs/archive/next-work-sequencing-closed-s11-hostref-mcpstdio.md`](../archive/next-work-sequencing-closed-s11-hostref-mcpstdio.md). The 2026-11-15 ranking (item 25 as the next theme, open Tier B and Tier C) is in [`docs/archive/next-work-sequencing-closed-2026-11-15-pre-adr-0026.md`](../archive/next-work-sequencing-closed-2026-11-15-pre-adr-0026.md). Ordinals below match that snapshot. Do not renumber them.
 
@@ -36,7 +36,7 @@ Story cells that said **not yet decomposed** on 2026-11-15 were checked on `orig
 
 | Phase | Rank | Item | Source | Armature story |
 |---|---|---|---|---|
-| 0 | 1 | N1 promotion from the host | ADR 0026 | **on `main`** (#480–#483). Operator settings checklist: `docs/agents/n1-host-settings.md`. Item 24 T4 is done (#444) |
+| 0 | 1 | N1 promotion from the host | ADR 0026 | **on `main`** (#480–#483, all closed). `promotion-ready` marked required on `main` on 2026-11-17. Operator settings checklist: `docs/agents/n1-host-settings.md`. Item 24 T4 is done (#444) |
 | 0 | 5 | Skills diet | ADR 0026 skills audit | not yet decomposed. Depends on N1 |
 | 1 | 4 | Materialization speed | replaces item 44 / LH C2 | not yet decomposed. Target 10–100 ms |
 | 2 | 2 | Harness contract, five harnesses | item 28 / Next-Ten №08 | not yet decomposed. 28a and 28b are delivered |
