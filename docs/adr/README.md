@@ -18,6 +18,7 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0010](0010-park-not-purge-subtractive-release.md) | Parked Surfaces Are Deleted Outright, Not Soft-Deprecated | Accepted |
 | [0011](0011-cli-groups-mirror-deep-modules.md) | CLI Command Groups Are Discovered From Deep Module Boundaries | Accepted |
 | [0012](0012-context-files-intent-lifecycle-and-cli-semantics.md) | Context Files Intent, Lifecycle, and CLI Semantics | Accepted |
+| [0012](0012-scope-disjoint-wave-planning.md) | Scope-Disjoint Wave Planning Is File-Level Only | Accepted |
 | [0013](0013-managed-worktree-auto-provisioning.md) | Managed Worktree Auto-Provisioning with Boolean Flag | Accepted |
 | [0014](0014-two-tier-gates-and-evidence-based-acceptance.md) | Two-Tier Gates and Evidence-Based Acceptance | Proposed (amended in part by ADR-0015) |
 | [0015](0015-recalibrate-mutation-and-coverage-gates.md) | Recalibrate Mutation and Coverage Gates | Accepted |
@@ -26,6 +27,7 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0018](0018-payload-keyed-op-idempotency.md) | Payload-Keyed Op Idempotency | Accepted |
 | [0019](0019-park-toon-output-format.md) | Park TOON as an Agent Output Encoding | Accepted |
 | [0020](0020-agent-error-contract.md) | Agent-grade error contract | Accepted |
+| [0021](0021-grounding-gated-on-confidence.md) | Grounding is gated on Confidence, not status | Accepted |
 | [0022](0022-promotion-is-a-recorded-delivery.md) | Promotion Is a Recorded Delivery on the Target | Accepted (amends ADR-0005 and ADR-0008) |
 | [0023](0023-depguard-allow-list-widens-are-adr-class.md) | Widening a Depguard Fence Is ADR-Class | Accepted (amends ADR-0004) |
 | [0024](0024-arm-mcp-stdio-session-is-not-t1.md) | An `arm mcp` Stdio Session Is Not a T1 Long-Running Process | Accepted (amends ADR-0009) |

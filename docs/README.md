@@ -31,7 +31,8 @@ reference only).
 ## ADRs (`adr/`)
 
 All ADRs are current (append-only decision records; superseding an ADR means
-adding a new one, not editing the old).
+adding a new one, not editing the old). Status and amendment history for the
+full set, including 0013–0026, are in [`adr/README.md`](adr/README.md).
 
 | Doc | Audience | Status |
 |---|---|---|
@@ -47,6 +48,21 @@ adding a new one, not editing the old).
 | `0010-park-not-purge-subtractive-release.md` | Contributors | Current |
 | `0011-cli-groups-mirror-deep-modules.md` | Contributors | Current |
 | `0012-context-files-intent-lifecycle-and-cli-semantics.md` | Contributors | Current |
+| `0012-scope-disjoint-wave-planning.md` | Contributors | Current |
+| `0013-managed-worktree-auto-provisioning.md` | Contributors | Current |
+| `0014-two-tier-gates-and-evidence-based-acceptance.md` | Contributors | Current |
+| `0015-recalibrate-mutation-and-coverage-gates.md` | Contributors | Current |
+| `0016-three-door-validation.md` | Contributors | Current |
+| `0017-agent-output-contract.md` | Contributors | Current |
+| `0018-payload-keyed-op-idempotency.md` | Contributors | Current |
+| `0019-park-toon-output-format.md` | Contributors | Current |
+| `0020-agent-error-contract.md` | Contributors | Current |
+| `0021-grounding-gated-on-confidence.md` | Contributors | Current |
+| `0022-promotion-is-a-recorded-delivery.md` | Contributors | Current |
+| `0023-depguard-allow-list-widens-are-adr-class.md` | Contributors | Current |
+| `0024-arm-mcp-stdio-session-is-not-t1.md` | Contributors | Current |
+| `0025-gitoid-shared-object-id-helper.md` | Contributors | Current |
+| `0026-armature-1-0-scope-keep-kill-defer.md` | Contributors | Current |
 | `template.md` | Contributors | Current — template for new ADRs |
 | `README.md` | Contributors | Current — ADR index |
 
@@ -58,6 +74,7 @@ or landed.
 | Doc | Audience | Status |
 |---|---|---|
 | `architecture.md` | Contributors, agents | Current — canonical architecture reference |
+| `host-ref.md` | Contributors | Current — HOSTREF-S1 spec, landed in #445–#455 |
 | `roles.md` | Contributors | Current |
 | `quality-controls.md` | Contributors | Current — Active |
 | `next-work-sequencing.md` | Planners | Current — cross-document execution order |
@@ -95,6 +112,7 @@ otherwise closed out. Each file carries a `Superseded by` header.
 | `next-work-sequencing-closed-v010.md` | Historical | v0.1.0 cut + post-cut leftover deliveries moved off the living sequencing page |
 | `next-work-sequencing-closed-s12-w21.md` | Historical | S12 → W21 cascade product deliveries (ops-backup / D11 / D14 / W21 identity) moved off the living sequencing page |
 | `next-work-sequencing-closed-s11-hostref-mcpstdio.md` | Historical | Item 24 T4 / D13, HOSTREF-S1, and MCPSTDIO-S1 product deliveries moved off the living sequencing page |
+| `next-work-sequencing-closed-2026-11-15-pre-adr-0026.md` | Historical | 2026-11-15 ranking (item 25 next, open Tier B and Tier C) closed by ADR 0026 (#479) and moved off the living sequencing page |
 
 ## Superpowers plans and specs (`superpowers/plans/`, `superpowers/specs/`)
 

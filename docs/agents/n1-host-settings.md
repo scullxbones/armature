@@ -7,12 +7,12 @@ Source: ADR 0026 N1 design; Phase 0 closeout issue #483.
 
 ## 1. Required check: `promotion-ready`
 
-- [ ] In branch protection for `main` (and any other protected integration
+- [x] In branch protection for `main` (and any other protected integration
       branch that must enforce N1 poka-yoke), mark the GitHub Actions check
       named **`promotion-ready`** as **required**.
-- [ ] Match the check identity to the job `name:` (`promotion-ready` in
+- [x] Match the check identity to the job `name:` (`promotion-ready` in
       `.github/workflows/ci.yml`), not the workflow filename.
-- [ ] Enable only after that job has run on `main` and appears in the
+- [x] Enable only after that job has run on `main` and appears in the
       branch-protection UI. Enabling earlier sticks every open PR.
 - [ ] Spot-check: a PR without a green `promotion-ready` cannot merge.
 
@@ -79,25 +79,25 @@ The `Arm land` workflow (`.github/workflows/arm-land.yml`) must be allowed to
 fast-forward-push `_armature` using the workflow’s own `GITHUB_TOKEN` (no PAT,
 no extra secrets).
 
-- [ ] Repo / org Actions permissions allow `contents: write` for this
+- [x] Repo / org Actions permissions allow `contents: write` for this
       workflow’s token (workflow already declares it).
-- [ ] Confirm the Action can FF-push `_armature` without a branch rule that
+- [x] Confirm the Action can FF-push `_armature` without a branch rule that
       blocks FF-only updates to that ref. Prefer minimum contents write; do
       not mint PATs.
-- [ ] Concurrency group `armature-land` stays single-writer
+- [x] Concurrency group `armature-land` stays single-writer
       (`cancel-in-progress: false`).
-- [ ] No force-push to `_armature` from the Action (`arm push-ops` only).
-- [ ] `issues: write` remains available so jidoka can open one andon issue.
+- [x] No force-push to `_armature` from the Action (`arm push-ops` only).
+- [x] `issues: write` remains available so jidoka can open one andon issue.
 
 ## 3. Optional
 
-- [ ] Scheduled sweep on `Arm land` stays enabled (not disabled by repo
+- [x] Scheduled sweep on `Arm land` stays enabled (not disabled by repo
       Actions policy). Cron: hourly at minute 17.
 
 ## 4. Proof commands (after settings)
 
-- [ ] `bash scripts/n1-proof.sh` green (full fixture proof bar).
-- [ ] `arm land --pr 464 --dry-run` → already promoted, no new ops
+- [x] `bash scripts/n1-proof.sh` green (full fixture proof bar).
+- [x] `arm land --pr 464 --dry-run` → already promoted, no new ops
       (`{"count":0,"issues":[],…}`; ops byte count unchanged).
-- [ ] `actionlint` clean on N1 workflows (`.github/workflows/ci.yml`,
+- [x] `actionlint` clean on N1 workflows (`.github/workflows/ci.yml`,
       `.github/workflows/arm-land.yml`).
