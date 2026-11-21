@@ -1533,15 +1533,8 @@
       ]
     },
     "internal/promotion": {
-      "count": 122,
+      "count": 108,
       "names": [
-        "ActiveStop",
-        "ActiveStop.AndonURL",
-        "ActiveStop.IssueID",
-        "ActiveStop.Kind",
-        "ActiveStop.PR",
-        "ActiveStop.Step",
-        "ActiveStop.TreeRoot",
         "ActiveStops",
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1594,7 +1587,6 @@
         "KindNotDone",
         "KindNotLeaf",
         "KindPromote",
-        "KindSeen",
         "Node",
         "Node.Base",
         "Node.Children",
@@ -1649,13 +1641,7 @@
         "StepRequiredInput",
         "StopCovering",
         "TreeConsistencyViolations",
-        "TreeMemberIDs",
         "TreeRepairGuidance",
-        "TreeRoot",
-        "TripPlan",
-        "TripPlan.OpenAndon",
-        "TripPlan.OpenDogfood",
-        "TripPlan.TreeRoot",
         "WouldViolateTreeConsistency"
       ]
     },

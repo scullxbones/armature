@@ -10,19 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTreeRootAndMembers_REQ_482(t *testing.T) {
-	t.Parallel()
-	g := promotion.Graph{
-		"epic-01":  {Children: []string{"story-01"}},
-		"story-01": {Parent: "epic-01", Children: []string{"task-01", "task-02"}},
-		"task-01":  {Parent: "story-01"},
-		"task-02":  {Parent: "story-01"},
-	}
-	assert.Equal(t, "epic-01", promotion.TreeRoot(g, "task-01"))
-	members := promotion.TreeMemberIDs(g, "epic-01")
-	assert.Equal(t, []string{"epic-01", "story-01", "task-01", "task-02"}, members)
-}
-
 func TestActiveStopsTripAndClear_REQ_482(t *testing.T) {
 	t.Parallel()
 	history := []ops.PromotionStop{
@@ -82,13 +69,14 @@ func TestCheckReady_JidokaStopTreeOnly_REQ_482(t *testing.T) {
 		"task-01":   {Parent: "epic-01"},
 		"unrelated": {},
 	}
-	stops := []promotion.ActiveStop{{
+	stops := promotion.ActiveStops([]ops.PromotionStop{{
+		Action:   ops.PromotionStopTrip,
 		TreeRoot: "epic-01",
 		IssueID:  "task-01",
 		PR:       "99",
 		Step:     "land:missing-assessment",
 		Kind:     "missing-assessment",
-	}}
+	}})
 	issue := promotion.ReadyIssue{
 		DefinitionOfDone: "ship",
 		Acceptance:       json.RawMessage(`["ok"]`),

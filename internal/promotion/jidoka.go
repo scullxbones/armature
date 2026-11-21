@@ -7,8 +7,9 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// ActiveStop is a tree-scoped jidoka stop that currently blocks promotion-ready.
-type ActiveStop struct {
+// activeStop is a tree-scoped jidoka stop that currently blocks promotion-ready.
+// Callers fold history with ActiveStops and read coverage through StopCovering.
+type activeStop struct {
 	TreeRoot string
 	IssueID  string
 	PR       string
@@ -17,8 +18,8 @@ type ActiveStop struct {
 	AndonURL string
 }
 
-// TreeRoot walks Parent links to the issue-tree root (id itself when parentless).
-func TreeRoot(g Graph, id string) string {
+// treeRoot walks Parent links to the issue-tree root (id itself when parentless).
+func treeRoot(g Graph, id string) string {
 	if id == "" || g == nil {
 		return id
 	}
@@ -40,8 +41,8 @@ func TreeRoot(g Graph, id string) string {
 	}
 }
 
-// TreeMemberIDs returns the root plus every descendant under root (pre-order).
-func TreeMemberIDs(g Graph, root string) []string {
+// treeMemberIDs returns the root plus every descendant under root (pre-order).
+func treeMemberIDs(g Graph, root string) []string {
 	if root == "" || g == nil {
 		return nil
 	}
@@ -74,7 +75,7 @@ func TreeMemberIDs(g Graph, root string) []string {
 // ActiveStops folds trip/clear history into currently armed stops (one per tree root).
 // History is applied in (At, Seq) order so later clears/trips win regardless of
 // which worker log file ReadDir returned first.
-func ActiveStops(history []ops.PromotionStop) []ActiveStop {
+func ActiveStops(history []ops.PromotionStop) []activeStop {
 	sorted := append([]ops.PromotionStop(nil), history...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		if sorted[i].At != sorted[j].At {
@@ -84,7 +85,7 @@ func ActiveStops(history []ops.PromotionStop) []ActiveStop {
 	})
 
 	type state struct {
-		active ActiveStop
+		active activeStop
 		armed  bool
 	}
 	byRoot := map[string]*state{}
@@ -103,7 +104,7 @@ func ActiveStops(history []ops.PromotionStop) []ActiveStop {
 		switch rec.Action {
 		case ops.PromotionStopTrip:
 			st.armed = true
-			st.active = ActiveStop{
+			st.active = activeStop{
 				TreeRoot: root,
 				IssueID:  rec.IssueID,
 				PR:       rec.PR,
@@ -113,10 +114,10 @@ func ActiveStops(history []ops.PromotionStop) []ActiveStop {
 			}
 		case ops.PromotionStopClear:
 			st.armed = false
-			st.active = ActiveStop{}
+			st.active = activeStop{}
 		}
 	}
-	out := make([]ActiveStop, 0)
+	out := make([]activeStop, 0)
 	for _, root := range order {
 		st := byRoot[root]
 		if st != nil && st.armed {
@@ -127,13 +128,13 @@ func ActiveStops(history []ops.PromotionStop) []ActiveStop {
 }
 
 // StopCovering returns the active stop whose tree covers any of issueIDs.
-func StopCovering(stops []ActiveStop, g Graph, issueIDs []string) *ActiveStop {
+func StopCovering(stops []activeStop, g Graph, issueIDs []string) *activeStop {
 	if len(stops) == 0 || len(issueIDs) == 0 {
 		return nil
 	}
-	covered := map[string]ActiveStop{}
+	covered := map[string]activeStop{}
 	for _, stop := range stops {
-		for _, id := range TreeMemberIDs(g, stop.TreeRoot) {
+		for _, id := range treeMemberIDs(g, stop.TreeRoot) {
 			covered[id] = stop
 		}
 		// Always cover the recorded root even if graph lacks it.
@@ -148,7 +149,7 @@ func StopCovering(stops []ActiveStop, g Graph, issueIDs []string) *ActiveStop {
 			return &s
 		}
 		if g != nil {
-			root := TreeRoot(g, id)
+			root := treeRoot(g, id)
 			if stop, ok := covered[root]; ok {
 				s := stop
 				return &s
@@ -158,8 +159,8 @@ func StopCovering(stops []ActiveStop, g Graph, issueIDs []string) *ActiveStop {
 	return nil
 }
 
-// KindSeen reports whether history already recorded a trip of the same kind for treeRoot.
-func KindSeen(history []ops.PromotionStop, treeRoot, kind string) bool {
+// kindSeen reports whether history already recorded a trip of the same kind for treeRoot.
+func kindSeen(history []ops.PromotionStop, treeRoot, kind string) bool {
 	if treeRoot == "" || kind == "" {
 		return false
 	}
@@ -171,8 +172,8 @@ func KindSeen(history []ops.PromotionStop, treeRoot, kind string) bool {
 	return false
 }
 
-// TripPlan is the jidoka action for one land/sweep failure.
-type TripPlan struct {
+// tripPlan is the jidoka action for one land/sweep failure.
+type tripPlan struct {
 	TreeRoot    string
 	OpenAndon   bool
 	OpenDogfood bool
@@ -180,13 +181,13 @@ type TripPlan struct {
 
 // PlanTrip decides andon vs dogfood for a failure on issueID within g.
 // First trip of a kind opens andon; a repeated kind opens a dogfood finding instead.
-func PlanTrip(g Graph, history []ops.PromotionStop, issueID, kind string) TripPlan {
-	root := TreeRoot(g, issueID)
+func PlanTrip(g Graph, history []ops.PromotionStop, issueID, kind string) tripPlan {
+	root := treeRoot(g, issueID)
 	if root == "" {
 		root = issueID
 	}
-	plan := TripPlan{TreeRoot: root}
-	if KindSeen(history, root, kind) {
+	plan := tripPlan{TreeRoot: root}
+	if kindSeen(history, root, kind) {
 		plan.OpenDogfood = true
 		return plan
 	}

@@ -27,7 +27,7 @@ type ReadyInput struct {
 	IssueIDs     []string
 	Issues       map[string]ReadyIssue
 	GateEvidence []ops.GateEvidence
-	Stops        []ActiveStop // armed jidoka stops (ADR 0026)
+	Stops        []activeStop // armed jidoka stops (ADR 0026)
 	Graph        Graph        // issue tree for stop coverage; optional
 	ActionsRunID string
 }
