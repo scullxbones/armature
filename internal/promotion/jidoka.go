@@ -8,7 +8,6 @@ import (
 )
 
 // activeStop is a tree-scoped jidoka stop that currently blocks promotion-ready.
-// Callers fold history with ActiveStops and read coverage through StopCovering.
 type activeStop struct {
 	TreeRoot string
 	IssueID  string
@@ -18,7 +17,6 @@ type activeStop struct {
 	AndonURL string
 }
 
-// treeRoot walks Parent links to the issue-tree root (id itself when parentless).
 func treeRoot(g Graph, id string) string {
 	if id == "" || g == nil {
 		return id
@@ -159,7 +157,6 @@ func StopCovering(stops []activeStop, g Graph, issueIDs []string) *activeStop {
 	return nil
 }
 
-// kindSeen reports whether history already recorded a trip of the same kind for treeRoot.
 func kindSeen(history []ops.PromotionStop, treeRoot, kind string) bool {
 	if treeRoot == "" || kind == "" {
 		return false
@@ -172,7 +169,6 @@ func kindSeen(history []ops.PromotionStop, treeRoot, kind string) bool {
 	return false
 }
 
-// tripPlan is the jidoka action for one land/sweep failure.
 type tripPlan struct {
 	TreeRoot    string
 	OpenAndon   bool
