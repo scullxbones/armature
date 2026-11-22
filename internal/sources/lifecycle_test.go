@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-func (l *Lifecycle) syncOneFromDisk(ctx context.Context, id string) SyncResult {
+func (l *Lifecycle) syncOneFromDisk(ctx context.Context, id string) syncResult {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
-		return SyncResult{ID: id, Error: fmt.Errorf("read manifest: %w", err)}
+		return syncResult{ID: id, Error: fmt.Errorf("read manifest: %w", err)}
 	}
 	result := l.syncEntry(ctx, &manifest, id)
 	if writeErr := l.writeManifest(manifest); writeErr != nil && result.Error == nil {
@@ -23,10 +23,10 @@ func (l *Lifecycle) syncOneFromDisk(ctx context.Context, id string) SyncResult {
 	return result
 }
 
-func (l *Lifecycle) verifyOneFromDisk(id string) VerifyResult {
+func (l *Lifecycle) verifyOneFromDisk(id string) verifyResult {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
-		return VerifyResult{ID: id, Status: VerifyError, Error: err}
+		return verifyResult{ID: id, Status: VerifyError, Error: err}
 	}
 	return l.verifyEntry(&manifest, id)
 }

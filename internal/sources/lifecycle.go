@@ -13,7 +13,7 @@ import (
 type Lifecycle struct {
 	manifestPath  string
 	provider      providerRegistry
-	fileCommitter FileCommitter
+	fileCommitter worktreeCommitter
 	worktreePath  string
 	now           clock.Clock
 }
@@ -46,11 +46,11 @@ func NewLifecycle(manifestPath string) *Lifecycle {
 // NewLifecycleWithCommitter creates a new source lifecycle manager that auto-commits
 // manifest and cache changes to the worktree's _armature branch.
 // Pass worktreePath="" to disable auto-commit.
-func NewLifecycleWithCommitter(manifestPath, worktreePath string, fc FileCommitter) *Lifecycle {
+func NewLifecycleWithCommitter(manifestPath, worktreePath string, fc worktreeCommitter) *Lifecycle {
 	return newLifecycle(manifestPath, &defaultProviderRegistry{}, worktreePath, fc)
 }
 
-func newLifecycle(manifestPath string, registry providerRegistry, worktreePath string, fc FileCommitter) *Lifecycle {
+func newLifecycle(manifestPath string, registry providerRegistry, worktreePath string, fc worktreeCommitter) *Lifecycle {
 	return &Lifecycle{
 		manifestPath:  manifestPath,
 		provider:      registry,
@@ -75,7 +75,8 @@ func (l *Lifecycle) Register(entry SourceEntry) (SourceEntry, error) {
 	return entry, nil
 }
 
-type SyncResult struct {
+// syncResult is one source's outcome from SyncAll.
+type syncResult struct {
 	ID           string
 	Fingerprint  string
 	ProviderType string
@@ -83,10 +84,10 @@ type SyncResult struct {
 	Error        error
 }
 
-func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string) SyncResult {
+func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string) syncResult {
 	entry, ok := manifest.Get(id)
 	if !ok {
-		return SyncResult{
+		return syncResult{
 			ID:    id,
 			Error: fmt.Errorf("source %q not found in manifest", id),
 		}
@@ -97,7 +98,7 @@ func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string
 	if err != nil {
 		entry.SyncFailed = true
 		manifest.Upsert(*entry)
-		return SyncResult{
+		return syncResult{
 			ID:           id,
 			ProviderType: providerType,
 			Error:        err,
@@ -108,7 +109,7 @@ func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string
 	if err != nil {
 		entry.SyncFailed = true
 		manifest.Upsert(*entry)
-		return SyncResult{
+		return syncResult{
 			ID:           id,
 			ProviderType: providerType,
 			Error:        fmt.Errorf("fetch: %w", err),
@@ -120,7 +121,7 @@ func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string
 	if err := l.writeCache(id, data); err != nil {
 		entry.SyncFailed = true
 		manifest.Upsert(*entry)
-		return SyncResult{
+		return syncResult{
 			ID:           id,
 			ProviderType: providerType,
 			Error:        fmt.Errorf("write cache: %w", err),
@@ -132,7 +133,7 @@ func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string
 	entry.SyncFailed = false
 	manifest.Upsert(*entry)
 
-	return SyncResult{
+	return syncResult{
 		ID:           id,
 		Fingerprint:  fp,
 		ProviderType: providerType,
@@ -150,13 +151,13 @@ func (l *Lifecycle) syncedAt() time.Time {
 
 // SyncAll synchronizes all sources in the manifest.
 // Returns a slice of results (one per source) and a combined error if all sources failed.
-func (l *Lifecycle) SyncAll(ctx context.Context) ([]SyncResult, error) {
+func (l *Lifecycle) SyncAll(ctx context.Context) ([]syncResult, error) {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
 	}
 
-	var results []SyncResult
+	var results []syncResult
 	successCount := 0
 
 	for id := range manifest.Entries {
@@ -182,28 +183,30 @@ func (l *Lifecycle) SyncAll(ctx context.Context) ([]SyncResult, error) {
 	return results, nil
 }
 
-type VerifyResult struct {
+// verifyResult is one source's outcome from VerifyAll.
+type verifyResult struct {
 	ID      string
-	Status  VerifyStatus
+	Status  verifyStatus
 	Stored  string
 	Current string
 	Error   error
 }
 
-type VerifyStatus string
+// verifyStatus classifies one VerifyAll row. Callers match the exported Verify* constants.
+type verifyStatus string
 
 const (
-	VerifyOK      VerifyStatus = "OK"
-	VerifyChanged VerifyStatus = "CHANGED"
-	VerifyMissing VerifyStatus = "MISSING"
-	VerifyStale   VerifyStatus = "STALE"
-	VerifyError   VerifyStatus = "ERROR"
+	VerifyOK      verifyStatus = "OK"
+	VerifyChanged verifyStatus = "CHANGED"
+	VerifyMissing verifyStatus = "MISSING"
+	VerifyStale   verifyStatus = "STALE"
+	VerifyError   verifyStatus = "ERROR"
 )
 
-func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
+func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) verifyResult {
 	entry, ok := manifest.Get(id)
 	if !ok {
-		return VerifyResult{
+		return verifyResult{
 			ID:     id,
 			Status: VerifyError,
 			Error:  fmt.Errorf("source %q not found in manifest", id),
@@ -211,7 +214,7 @@ func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 	}
 
 	if entry.SyncFailed {
-		return VerifyResult{
+		return verifyResult{
 			ID:     id,
 			Status: VerifyStale,
 			Stored: entry.Fingerprint,
@@ -220,7 +223,7 @@ func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 
 	data, err := ReadCache(l.manifestPath, id)
 	if err != nil {
-		return VerifyResult{
+		return verifyResult{
 			ID:     id,
 			Status: VerifyError,
 			Stored: entry.Fingerprint,
@@ -229,7 +232,7 @@ func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 	}
 
 	if data == nil {
-		return VerifyResult{
+		return verifyResult{
 			ID:     id,
 			Status: VerifyMissing,
 			Stored: entry.Fingerprint,
@@ -238,7 +241,7 @@ func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 
 	currentFP := Fingerprint(data)
 	if currentFP == entry.Fingerprint {
-		return VerifyResult{
+		return verifyResult{
 			ID:      id,
 			Status:  VerifyOK,
 			Stored:  entry.Fingerprint,
@@ -246,7 +249,7 @@ func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 		}
 	}
 
-	return VerifyResult{
+	return verifyResult{
 		ID:      id,
 		Status:  VerifyChanged,
 		Stored:  entry.Fingerprint,
@@ -256,13 +259,13 @@ func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 
 // VerifyAll checks freshness of all sources in the manifest.
 // Returns a slice of results and an error if any source is not OK.
-func (l *Lifecycle) VerifyAll() ([]VerifyResult, error) {
+func (l *Lifecycle) VerifyAll() ([]verifyResult, error) {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
 	}
 
-	var results []VerifyResult
+	var results []verifyResult
 	allOK := true
 
 	for id := range manifest.Entries {
