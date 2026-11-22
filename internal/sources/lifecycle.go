@@ -43,8 +43,6 @@ func NewLifecycle(manifestPath string) *Lifecycle {
 	return newLifecycle(manifestPath, &defaultProviderRegistry{}, "", nil)
 }
 
-// NewLifecycleWithCommitter creates a new source lifecycle manager that auto-commits
-// manifest and cache changes to the worktree's _armature branch.
 // Pass worktreePath="" to disable auto-commit.
 func NewLifecycleWithCommitter(manifestPath, worktreePath string, fc worktreeCommitter) *Lifecycle {
 	return newLifecycle(manifestPath, &defaultProviderRegistry{}, worktreePath, fc)
@@ -75,7 +73,6 @@ func (l *Lifecycle) Register(entry SourceEntry) (SourceEntry, error) {
 	return entry, nil
 }
 
-// syncResult is one source's outcome from SyncAll.
 type syncResult struct {
 	ID           string
 	Fingerprint  string
@@ -183,7 +180,6 @@ func (l *Lifecycle) SyncAll(ctx context.Context) ([]syncResult, error) {
 	return results, nil
 }
 
-// verifyResult is one source's outcome from VerifyAll.
 type verifyResult struct {
 	ID      string
 	Status  verifyStatus
@@ -192,7 +188,7 @@ type verifyResult struct {
 	Error   error
 }
 
-// verifyStatus classifies one VerifyAll row. Callers match the exported Verify* constants.
+// Callers match the exported Verify* constants.
 type verifyStatus string
 
 const (

@@ -7,7 +7,6 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-// worktreeCommitter commits one worktree-relative path after a manifest or cache write.
 type worktreeCommitter interface {
 	CommitWorktreeOp(relPath, message string) error
 }
