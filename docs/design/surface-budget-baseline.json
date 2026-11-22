@@ -1824,10 +1824,8 @@
       ]
     },
     "internal/sources": {
-      "count": 50,
+      "count": 35,
       "names": [
-        "FileCommitter",
-        "FileCommitter.CommitWorktreeOp",
         "Fingerprint",
         "Lifecycle",
         "Lifecycle.Content",
@@ -1856,24 +1854,11 @@
         "SourceEntry.SyncFailed",
         "SourceEntry.Title",
         "SourceEntry.URL",
-        "SyncResult",
-        "SyncResult.Error",
-        "SyncResult.Fingerprint",
-        "SyncResult.ID",
-        "SyncResult.LastSynced",
-        "SyncResult.ProviderType",
         "VerifyChanged",
         "VerifyError",
         "VerifyMissing",
         "VerifyOK",
-        "VerifyResult",
-        "VerifyResult.Current",
-        "VerifyResult.Error",
-        "VerifyResult.ID",
-        "VerifyResult.Status",
-        "VerifyResult.Stored",
         "VerifyStale",
-        "VerifyStatus",
         "WriteCache",
         "WriteManifest"
       ]

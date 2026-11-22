@@ -7,7 +7,8 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-type FileCommitter interface {
+// worktreeCommitter commits one worktree-relative path after a manifest or cache write.
+type worktreeCommitter interface {
 	CommitWorktreeOp(relPath, message string) error
 }
 
@@ -51,21 +52,21 @@ func ReadCache(path string, id string) ([]byte, error) {
 	return adapters.ReadCacheFile(path, id)
 }
 
-func writeManifestAndCommit(manifestPath, worktreePath string, m Manifest, fc FileCommitter) error {
+func writeManifestAndCommit(manifestPath, worktreePath string, m Manifest, fc worktreeCommitter) error {
 	if err := WriteManifest(manifestPath, m); err != nil {
 		return err
 	}
 	return commitWorktreeFile(worktreePath, filepath.Join(manifestPath, "manifest.json"), "sources: update manifest.json", fc)
 }
 
-func writeCacheAndCommit(manifestPath, worktreePath, id string, data []byte, fc FileCommitter) error {
+func writeCacheAndCommit(manifestPath, worktreePath, id string, data []byte, fc worktreeCommitter) error {
 	if err := WriteCache(manifestPath, id, data); err != nil {
 		return err
 	}
 	return commitWorktreeFile(worktreePath, filepath.Join(manifestPath, id+".cache"), fmt.Sprintf("sources: update cache for %s", id), fc)
 }
 
-func commitWorktreeFile(worktreePath, absPath, message string, fc FileCommitter) error {
+func commitWorktreeFile(worktreePath, absPath, message string, fc worktreeCommitter) error {
 	if worktreePath == "" {
 		return nil
 	}
