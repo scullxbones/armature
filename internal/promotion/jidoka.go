@@ -7,7 +7,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// activeStop is a tree-scoped jidoka stop that currently blocks promotion-ready.
 type activeStop struct {
 	TreeRoot string
 	IssueID  string
