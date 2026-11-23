@@ -790,10 +790,8 @@
       ]
     },
     "internal/harnesspolicy": {
-      "count": 37,
+      "count": 29,
       "names": [
-        "CheckAcceptanceCriteria",
-        "CheckCitations",
         "CheckScope",
         "CitationAcceptanceFact",
         "CitationAcceptanceFact.SourceEntryID",
@@ -821,14 +819,8 @@
         "ScopeCheckResult.Message",
         "ScopeCheckResult.Scope",
         "ScopeCheckResult.Violations",
-        "ScopeViolation",
-        "ScopeViolation.Path",
         "SourceLinkFact",
-        "SourceLinkFact.SourceEntryID",
-        "VerificationResult",
-        "VerificationResult.Message",
-        "VerificationResult.Name",
-        "VerificationResult.Passed"
+        "SourceLinkFact.SourceEntryID"
       ]
     },
     "internal/importbf": {

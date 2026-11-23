@@ -17,11 +17,12 @@ type scopePolicy struct {
 type ScopeCheckResult struct {
 	Allowed    bool
 	EmptyScope bool
-	Violations []ScopeViolation
+	Violations []scopeViolation
 	Scope      []string
 }
 
-type ScopeViolation struct {
+// scopeViolation is one path CheckScope rejected. Callers read Path.
+type scopeViolation struct {
 	Path string
 }
 
@@ -52,13 +53,13 @@ func (p scopePolicy) checkPaths(paths []string) ScopeCheckResult {
 		}
 	}
 
-	violations := make([]ScopeViolation, 0)
+	violations := make([]scopeViolation, 0)
 	for _, rawPath := range paths {
 		path := p.cleanPath(rawPath)
 		if p.allows(path) {
 			continue
 		}
-		violations = append(violations, ScopeViolation{Path: path})
+		violations = append(violations, scopeViolation{Path: path})
 	}
 
 	return ScopeCheckResult{
@@ -108,10 +109,10 @@ func (p scopePolicy) cleanPath(path string) string {
 	return cleanRepoPath(path)
 }
 
-func violationsForPaths(paths []string) []ScopeViolation {
-	violations := make([]ScopeViolation, 0, len(paths))
+func violationsForPaths(paths []string) []scopeViolation {
+	violations := make([]scopeViolation, 0, len(paths))
 	for _, path := range paths {
-		violations = append(violations, ScopeViolation{Path: cleanRepoPath(path)})
+		violations = append(violations, scopeViolation{Path: cleanRepoPath(path)})
 	}
 	return violations
 }

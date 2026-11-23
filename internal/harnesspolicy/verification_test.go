@@ -17,7 +17,7 @@ func TestVerificationServiceCheckAcceptanceCriteriaRejectsAllUnverifiable(t *tes
 	result := checkAcceptanceCriteria(acceptance)
 
 	assert.False(t, result.Passed)
-	assert.Equal(t, CheckAcceptanceCriteria, result.Name)
+	assert.Equal(t, acceptanceCriteriaCheck, result.name)
 	assert.Contains(t, result.Message, "unverifiable")
 }
 
@@ -28,7 +28,7 @@ func TestVerificationServiceCheckAcceptanceCriteriaAcceptsMachineVerifiableItem(
 	result := checkAcceptanceCriteria(acceptance)
 
 	assert.True(t, result.Passed)
-	assert.Equal(t, CheckAcceptanceCriteria, result.Name)
+	assert.Equal(t, acceptanceCriteriaCheck, result.name)
 }
 
 func TestVerificationServiceCheckAcceptanceCriteriaRejectsMissingArray(t *testing.T) {
@@ -49,7 +49,7 @@ func TestVerificationServiceCheckCitationsRejectsUncitedSource(t *testing.T) {
 	result := checkCitations(checks)
 
 	assert.False(t, result.Passed)
-	assert.Equal(t, CheckCitations, result.Name)
+	assert.Equal(t, citationsCheck, result.name)
 	assert.Contains(t, result.Message, "src-2")
 }
 
@@ -62,7 +62,7 @@ func TestMissingAcceptanceIsNamedNotCalledUncited_REQ_CITEGATE_T1(t *testing.T) 
 	result := checkCitations(checks)
 
 	assert.False(t, result.Passed)
-	assert.Equal(t, CheckCitations, result.Name)
+	assert.Equal(t, citationsCheck, result.name)
 	assert.Contains(t, result.Message, "Citation Acceptance")
 	assert.Contains(t, result.Message, "missing")
 	assert.Contains(t, result.Message, "arm sources accept-citation")
@@ -74,7 +74,7 @@ func TestVerificationServiceCheckCitationsAcceptsEmptyChecks(t *testing.T) {
 	result := checkCitations(nil)
 
 	assert.True(t, result.Passed)
-	assert.Equal(t, CheckCitations, result.Name)
+	assert.Equal(t, citationsCheck, result.name)
 }
 
 func TestVerificationServiceCheckAcceptanceCriteria_NullJSON(t *testing.T) {
@@ -111,8 +111,8 @@ func TestVerificationServiceRunReturnsAcceptanceAndCitationResults(t *testing.T)
 	}.Verify()
 
 	assert.Len(t, results, 2)
-	assert.Equal(t, CheckAcceptanceCriteria, results[0].Name)
-	assert.Equal(t, CheckCitations, results[1].Name)
+	assert.Equal(t, acceptanceCriteriaCheck, results[0].name)
+	assert.Equal(t, citationsCheck, results[1].name)
 	assert.True(t, results[0].Passed)
 	assert.True(t, results[1].Passed)
 }

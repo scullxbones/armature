@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	CheckAcceptanceCriteria = "acceptance-criteria"
-	CheckCitations          = "citations"
+	acceptanceCriteriaCheck = "acceptance-criteria"
+	citationsCheck          = "citations"
 )
 
 func verifiableKeywords() []string {
@@ -27,21 +27,23 @@ type CitationCheck struct {
 	Accepted      bool
 }
 
-type VerificationResult struct {
-	Name    string
+// verificationResult is one acceptance or citation check. Callers read
+// Passed and Message; the check name stays inside the package.
+type verificationResult struct {
+	name    string
 	Passed  bool
 	Message string
 }
 
-func (p IssuePolicy) Verify() []VerificationResult {
-	return []VerificationResult{
+func (p IssuePolicy) Verify() []verificationResult {
+	return []verificationResult{
 		checkAcceptanceCriteria(p.Acceptance),
 		checkCitations(p.Citations),
 	}
 }
 
-func checkAcceptanceCriteria(acceptance json.RawMessage) VerificationResult {
-	result := VerificationResult{Name: CheckAcceptanceCriteria}
+func checkAcceptanceCriteria(acceptance json.RawMessage) verificationResult {
+	result := verificationResult{name: acceptanceCriteriaCheck}
 
 	if len(acceptance) == 0 || string(acceptance) == "null" {
 		result.Message = "acceptance array is empty or absent"
@@ -73,8 +75,8 @@ func checkAcceptanceCriteria(acceptance json.RawMessage) VerificationResult {
 	return result
 }
 
-func checkCitations(checks []CitationCheck) VerificationResult {
-	result := VerificationResult{Name: CheckCitations}
+func checkCitations(checks []CitationCheck) verificationResult {
+	result := verificationResult{name: citationsCheck}
 	uncited := make([]string, 0)
 	for _, check := range checks {
 		if !check.Accepted {
