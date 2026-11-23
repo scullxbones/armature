@@ -67,7 +67,6 @@ require_digits() {
 }
 
 emit_plan() {
-	# $1 true|false, then run_id job_id next_attempt when true
 	rm -f quote-recheck-marker.txt
 	if [ "$1" = "true" ]; then
 		printf 'quote-only check-core rerun\n' > quote-recheck-marker.txt
@@ -89,7 +88,6 @@ emit_plan() {
 }
 
 decide() {
-	# $1 conclusion  $2 failed-step-names joined by |  $3 verdict
 	conclusion=$1
 	failed=$2
 	verdict=$3

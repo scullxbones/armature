@@ -4,9 +4,6 @@
 # when it is red only because of the quote (or green with a now-wrong quote),
 # and the rerun must reuse the head SHA's coverage-check.log instead of
 # recomputing coverage. Missing quotes still fail closed inside check-core.
-#
-# On current main this contract fails: pr-coverage-quotes-on-edit.yml only
-# posts a separate check, so a red check-core stays red until a new commit.
 set -euo pipefail
 
 REPO_ROOT=$(CDPATH= cd -- "${1:-.}" && pwd)
@@ -157,8 +154,6 @@ if [[ $CONTRACT_STATUS -eq 0 ]]; then
 else
     fail "${CONTRACT:-workflow contract failed}"
 fi
-
-# --- behavioral fixtures (stub gh + jq) ---
 
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -362,7 +357,6 @@ else
     elif ! grep -qx 'POST repos/scullxbones/armature/actions/jobs/55/rerun' "$WORKDIR/posts"; then
         fail "rerun POST missing: $(cat "$WORKDIR/posts")"
     else
-        # exactly one rerun
         nposts=$(grep -c '/rerun' "$WORKDIR/posts" || true)
         if [[ "$nposts" -ne 1 ]]; then
             fail "expected one rerun POST, got $nposts"
