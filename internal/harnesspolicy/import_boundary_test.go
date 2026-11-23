@@ -55,12 +55,16 @@ func TestPolicyExportSurfaceHidesScopeAndVerificationAssembly(t *testing.T) {
 	pkgDir := filepath.Dir(thisFile)
 
 	banned := map[string]string{
-		"ScopePolicy":            "callers check scope; they do not construct a policy object",
-		"NewScopePolicy":         "CheckScope owns cwd/root fallback",
-		"NewScopePolicyWithRoot": "CheckScope takes an explicit root",
-		"VerificationService":    "IssuePolicy.Verify owns acceptance and citation checks",
-		"NewVerificationService": "IssuePolicy.Verify is the constructor-free entry",
-		"VerificationRequest":    "acceptance and citations live on IssuePolicy",
+		"ScopePolicy":             "callers check scope; they do not construct a policy object",
+		"NewScopePolicy":          "CheckScope owns cwd/root fallback",
+		"NewScopePolicyWithRoot":  "CheckScope takes an explicit root",
+		"VerificationService":     "IssuePolicy.Verify owns acceptance and citation checks",
+		"NewVerificationService":  "IssuePolicy.Verify is the constructor-free entry",
+		"VerificationRequest":     "acceptance and citations live on IssuePolicy",
+		"VerificationResult":      "IssuePolicy.Verify returns the check results",
+		"ScopeViolation":          "CheckScope reports rejected paths on ScopeCheckResult",
+		"CheckAcceptanceCriteria": "acceptance check names stay inside Verify",
+		"CheckCitations":          "citation check names stay inside Verify",
 	}
 
 	entries, err := os.ReadDir(pkgDir)
