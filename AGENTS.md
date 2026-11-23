@@ -32,7 +32,7 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 ## Details
 
 - [Workflow & operating model](docs/agents/workflow.md)
-- [Quality gates — TDD, `make check`, coverage/mutation thresholds](docs/agents/quality-gates.md)
+- [Quality gates — TDD, `make check`, coverage/mutation thresholds](docs/agents/quality-gates.md). PR coverage quotes come from the head SHA's `coverage-check.log`. Editing the PR body reruns quote-only `check-core` on that same SHA (the required check). An empty retrigger commit does not belong in the flow. The internal 86% floor is unchanged.
 - [Dogfood findings capture](docs/agents/dogfood-findings.md)
 - [Repo-local skills](docs/agents/skills.md) — `.agents/skills` is canonical; `.cursor/skills` entries are symlinks.
 
