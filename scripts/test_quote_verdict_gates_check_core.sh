@@ -466,8 +466,11 @@ PY
     prep_fix
     printf '%s\n' "$job_suite_fail" >"$WORKDIR/fix/jobs.json"
     set +e
-    MOUT=$(GH_BIN="$WORKDIR/gh" GH_LOG="$WORKDIR/gh.log" GH_POSTS="$WORKDIR/posts" GH_FIX="$WORKDIR/fix" \
-        MAX_POLLS=2 SLEEP_SECS=0 "$MUT" plan scullxbones/armature abcdef match)
+    MOUT=$(
+        cd "$WORKDIR/planout"
+        GH_BIN="$WORKDIR/gh" GH_LOG="$WORKDIR/gh.log" GH_POSTS="$WORKDIR/posts" GH_FIX="$WORKDIR/fix" \
+            MAX_POLLS=2 SLEEP_SECS=0 "$MUT" plan scullxbones/armature abcdef match
+    )
     set -e
     if [[ "$MOUT" == "rerun=false" ]]; then
         fail "mutant still refused a suite failure; decision site is not what the test locks"
