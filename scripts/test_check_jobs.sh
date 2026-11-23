@@ -888,6 +888,15 @@ if "ci-path-shadow-engines.sh" not in edit:
 if "pr-coverage-quote-check.sh" not in edit:
     print("FAIL: edit workflow must invoke pr-coverage-quote-check.sh")
     sys.exit(1)
+if "apply-quote-verdict-to-check-core.sh plan" not in edit or "apply-quote-verdict-to-check-core.sh commit" not in edit:
+    print("FAIL: edit workflow must plan and commit a check-core rerun for the quote verdict")
+    sys.exit(1)
+if "check-core-quote-rerun-skip.sh" not in ci:
+    print("FAIL: check-core must skip the suite on a quote-only rerun")
+    sys.exit(1)
+if "make check-job" in edit or "coverage-check.sh" in edit:
+    print("FAIL: edit workflow must not recompute coverage")
+    sys.exit(1)
 if "wait-coverage-check-artifact.sh" not in edit:
     print("FAIL: edit workflow must call wait-coverage-check-artifact.sh (poll loop not inline YAML)")
     sys.exit(1)

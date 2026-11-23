@@ -1,7 +1,10 @@
 # Own workflow so body `edited` never emits required CI job names
 # (check-core, mutate, …) as skipped. Polls for the head SHA's
 # coverage-check artifact from check-core (upload-before-compare) and
-# compares the LIVE PR body via gh api.
+# compares the LIVE PR body via gh api. When that verdict disagrees with
+# the required check-core job (quote-only red, or green with a now-wrong
+# quote), rerun check-core in quote-only mode. Coverage is the existing
+# log, not a new suite run. A suite failure is not rerun.
 
 name: PR coverage quotes on edit
 
@@ -11,7 +14,8 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  # Rerun the required check-core job after a body edit. Read is not enough.
+  actions: write
   pull-requests: read
 
 jobs:
@@ -19,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
+      actions: write
       pull-requests: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -41,13 +45,48 @@ jobs:
         run: bash scripts/wait-coverage-check-artifact.sh "$REPO" "$HEAD_SHA" coverage-check.log
 
       - name: PR body coverage quotes match prior coverage-check.log
+        id: align
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           # CURRENT body — event payload at workflow start can still race an
           # in-flight edit; re-fetch at compare time.
           gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq .body > /tmp/pr-body.md
-          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md coverage-check.log
+          quote_st=0
+          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md coverage-check.log || quote_st=$?
+          if [ "$quote_st" -eq 0 ]; then
+            verdict=match
+          else
+            verdict=mismatch
+          fi
+          # Required context stays check-core. plan does not recompute coverage.
+          scripts/apply-quote-verdict-to-check-core.sh plan "$REPO" "$HEAD_SHA" "$verdict"
+          exit "$quote_st"
+
+      # always(): a mismatch verdict fails the step above and must still be
+      # able to rerun a previously green check-core.
+      - name: Publish quote-recheck marker
+        if: ${{ always() && steps.align.outputs.rerun == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quote-recheck-${{ steps.align.outputs.run_id }}-${{ steps.align.outputs.next_attempt }}
+          path: quote-recheck-marker.txt
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Rerun check-core so the required check matches the quote verdict
+        if: ${{ always() && steps.align.outputs.rerun == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ steps.align.outputs.run_id }}
+          JOB_ID: ${{ steps.align.outputs.job_id }}
+          # Sibling jobs (mutate, …) can still be running after check-core
+          # has finished. The rerun API rejects an in-progress workflow run.
+          MAX_POLLS: "240"
+          SLEEP_SECS: "15"
+        run: bash scripts/apply-quote-verdict-to-check-core.sh commit "$REPO" "$RUN_ID" "$JOB_ID"

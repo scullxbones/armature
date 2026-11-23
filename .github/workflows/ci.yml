@@ -145,6 +145,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # Quote-only reruns list the quote-recheck marker and the coverage log.
+      # upload-artifact uses the runner's artifact token, not this scope.
+      actions: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -155,32 +158,61 @@ jobs:
         run: bash scripts/ci-path-shadow-engines.sh
       - name: PATH-shadow self-check
         run: bash scripts/ci-path-shadow-selfcheck.sh
+      # Attempt 1 always runs the suite. A later attempt skips it only when
+      # the edit workflow uploaded quote-recheck-<run_id>-<attempt> after the
+      # quote verdict disagreed with this job. Coverage stays the log from
+      # the attempt that actually ran the suite.
+      - name: Quote-only rerun reuses this head SHA's coverage-check.log
+        id: quote_rerun
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          # The marker is uploaded before the rerun is requested. Poll briefly
+          # in case the artifact list lags the rerun start; then fail closed
+          # only on API errors. No marker means this attempt runs the suite.
+          MAX_POLLS: "8"
+          SLEEP_SECS: "2"
+        run: bash scripts/check-core-quote-rerun-skip.sh
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        if: "${{ success() && (github.event_name != 'pull_request' || steps.quote_rerun.outputs.skip != 'true') }}"
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Install ripgrep
+        if: "${{ success() && (github.event_name != 'pull_request' || steps.quote_rerun.outputs.skip != 'true') }}"
         run: |
           dest="${HOME}/.local/bin"
           mkdir -p "$dest"
           echo "$dest" >> "$GITHUB_PATH"
           make install-rg-release DEST="$dest"
-      - run: make check-job JOB=check-core
+      - name: Run check-core suite
+        if: "${{ success() && (github.event_name != 'pull_request' || steps.quote_rerun.outputs.skip != 'true') }}"
+        run: make check-job JOB=check-core
         env:
           CHECK_INSTALL_TOOLS: "1"
       - name: Write coverage-check.log
-        if: github.event_name == 'pull_request'
+        if: "${{ success() && github.event_name == 'pull_request' && steps.quote_rerun.outputs.skip != 'true' }}"
         run: |
           set -euo pipefail
           test -f coverage.out
           scripts/coverage-check.sh . coverage.out | tee coverage-check.log
       - name: Upload coverage-check.log for late PR body paste
-        if: ${{ always() && github.event_name == 'pull_request' }}
+        if: "${{ always() && github.event_name == 'pull_request' && steps.quote_rerun.outputs.skip != 'true' }}"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-check-${{ github.event.pull_request.head.sha }}
           path: coverage-check.log
           retention-days: 5
           if-no-files-found: error
+      - name: Restore coverage-check.log for quote-only rerun
+        if: "${{ success() && github.event_name == 'pull_request' && steps.quote_rerun.outputs.skip == 'true' }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/wait-coverage-check-artifact.sh "$REPO" "$HEAD_SHA" coverage-check.log
       - name: PR body coverage quotes match this job's coverage.out
         if: github.event_name == 'pull_request'
         env:
