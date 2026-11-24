@@ -868,7 +868,7 @@
       ]
     },
     "internal/materialize": {
-      "count": 140,
+      "count": 136,
       "names": [
         "ApplyOpsSorted",
         "Checkpoint",
@@ -889,11 +889,7 @@
         "Decision.Topic",
         "Decision.WorkerID",
         "DeriveBranchName",
-        "GraphFromIndex",
         "GraphFromState",
-        "HistoryReader",
-        "HistoryReader.ListFilesAtCommit",
-        "HistoryReader.ShowFileAtCommit",
         "HostRef",
         "HostRef.At",
         "HostRef.Role",

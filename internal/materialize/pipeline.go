@@ -555,14 +555,16 @@ func skipCountFromCommitted(committed []byte, applied int64, filename string, lo
 	if applied >= int64(len(committed)) {
 		return locatedN
 	}
-	n := locatedN - len(parseOwnedLogOps(committed[applied:], filename))
+	parsed, scanErr := parseOwnedLogOps(committed[applied:], filename)
+	swallowErr(scanErr)
+	n := locatedN - len(parsed)
 	if n < 0 {
 		return 0
 	}
 	return n
 }
 
-func parseOwnedLogOps(content []byte, filename string) []ops.Op {
+func parseOwnedLogOps(content []byte, filename string) ([]ops.Op, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	var out []ops.Op
@@ -580,7 +582,7 @@ func parseOwnedLogOps(content []byte, filename string) []ops.Op {
 		}
 		out = append(out, op)
 	}
-	return out
+	return out, scanner.Err()
 }
 
 func committedLogBytes(gc *adapters.Client, head, name string) []byte {
