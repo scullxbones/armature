@@ -11,9 +11,7 @@ import (
 // MaterializeAtSHA replays all op log files at the given commit SHA and returns
 // the resulting materialized state. opsPrefixes are the paths within the git
 // tree where log files are stored (e.g., "ops" or ".armature/ops") — a file is
-// included if it falls under any of them. Multiple prefixes let a single
-// replay span a repo's collapse migration, where commits before the collapse
-// store logs under a nested prefix and commits after it store them at the root.
+// included if it falls under any of them.
 func MaterializeAtSHA(history historyReader, sha string, opsPrefixes ...string) (*State, error) {
 	files, err := history.ListFilesAtCommit(sha)
 	if err != nil {
