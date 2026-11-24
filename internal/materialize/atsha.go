@@ -1,8 +1,6 @@
 package materialize
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"slices"
 	"strings"
@@ -16,7 +14,7 @@ import (
 // included if it falls under any of them. Multiple prefixes let a single
 // replay span a repo's collapse migration, where commits before the collapse
 // store logs under a nested prefix and commits after it store them at the root.
-func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) (*State, error) {
+func MaterializeAtSHA(history historyReader, sha string, opsPrefixes ...string) (*State, error) {
 	files, err := history.ListFilesAtCommit(sha)
 	if err != nil {
 		return nil, fmt.Errorf("list files at %s: %w", sha, err)
@@ -42,25 +40,11 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 			return nil, fmt.Errorf("show file %s at %s: %w", f, sha, err)
 		}
 
-		scanner := bufio.NewScanner(bytes.NewReader(content))
-		scanner.Buffer(make([]byte, 1<<20), 1<<20)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-			op, err := ops.ParseLine(line)
-			if err != nil {
-				continue
-			}
-			if !ops.WorkerOwnsLog(op.WorkerID, f) {
-				continue
-			}
-			allOps = append(allOps, op)
+		parsed, scanErr := parseOwnedLogOps(content, f)
+		if scanErr != nil {
+			return nil, fmt.Errorf("scan file %s: %w", f, scanErr)
 		}
-		if err := scanner.Err(); err != nil {
-			return nil, fmt.Errorf("scan file %s: %w", f, err)
-		}
+		allOps = append(allOps, parsed...)
 	}
 
 	sortOpsByTimestamp(allOps)

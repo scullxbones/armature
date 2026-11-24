@@ -15,17 +15,6 @@ func GraphFromState(state *State) *dag.Graph {
 	return dag.FromIndex(nodeIndex)
 }
 
-// GraphFromIndex constructs a dag.Graph from a denormalized Index.
-// All slices are defensively copied so callers can safely mutate index
-// entries without corrupting the returned graph.
-func GraphFromIndex(index Index) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node, len(index))
-	for id, entry := range index {
-		nodeIndex[id] = graphNode(id, entry.Title, entry.Type, entry.Parent, entry.Children, entry.BlockedBy, entry.Blocks)
-	}
-	return dag.FromIndex(nodeIndex)
-}
-
 func graphNode(id, title, typ, parent string, children, blockedBy, blocks []string) *dag.Node {
 	return &dag.Node{
 		ID:        id,
