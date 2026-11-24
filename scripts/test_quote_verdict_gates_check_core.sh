@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# The edit path (PR body edited) decides the coverage-quote verdict that gates
-# merge. Required context stays check-core: a body edit must rerun THAT job
-# when it is red only because of the quote (or green with a now-wrong quote),
-# and the rerun must reuse the head SHA's coverage-check.log instead of
-# recomputing coverage. Missing quotes still fail closed inside check-core.
 set -euo pipefail
 
 REPO_ROOT=$(CDPATH= cd -- "${1:-.}" && pwd)
