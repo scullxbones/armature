@@ -1297,7 +1297,7 @@
       ]
     },
     "internal/opsbackup": {
-      "count": 30,
+      "count": 12,
       "names": [
         "AdvertisedRef",
         "AsideRef",
@@ -1308,26 +1308,8 @@
         "DispositionFastForward",
         "DispositionMissing",
         "ErrDiverge",
-        "Git",
-        "Git.BeginPerRunRef",
-        "Git.BundleCreateAdvertised",
-        "Git.BundleVerifyRestorable",
-        "Git.FetchBranchToRef",
-        "Git.ResolveRevision",
-        "Git.RestoreEvidence",
-        "OpsBranch",
         "PlanRestore",
-        "RestorePlan",
-        "RestorePlan.AsideRef",
-        "RestorePlan.Bundle",
-        "RestorePlan.Disposition",
-        "RestorePlan.Recovered",
         "Snapshot",
-        "SnapshotRequest",
-        "SnapshotRequest.OutputPath",
-        "SnapshotResult",
-        "SnapshotResult.Bundle",
-        "SnapshotResult.Tip",
         "Verify"
       ]
     },

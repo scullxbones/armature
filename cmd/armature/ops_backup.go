@@ -95,7 +95,7 @@ func newOpsBackupSnapshotCmd() *cobra.Command {
 		Short: "Write a fail-closed bundle of the published _armature tip",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			gc := opsBackupGit(cmd)
-			res, err := opsbackup.Snapshot(gc, opsbackup.SnapshotRequest{OutputPath: output})
+			res, err := opsbackup.Snapshot(gc, output)
 			if err != nil {
 				return armerrors.Map("OPS-BACKUP-1", err.Error(), []string{"arm ops-backup snapshot --output <path>"}, err)
 			}

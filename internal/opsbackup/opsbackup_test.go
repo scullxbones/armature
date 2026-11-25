@@ -174,7 +174,7 @@ func TestSnapshot_RefreshFail_DoesNotWriteBundle_REQ_TOPTIER_S12_T1(t *testing.T
 	out := filepath.Join(t.TempDir(), "should-not-exist.bundle")
 	g := refreshFailGit{inner: c, err: fmt.Errorf("simulated refresh failure")}
 
-	_, err := opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: out})
+	_, err := opsbackup.Snapshot(g, out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fail-closed")
 	_, statErr := os.Stat(out)
@@ -189,7 +189,7 @@ func TestSnapshot_BundleFail_PreservesPreexistingOutput_REQ_TOPTIER_S12_T1(t *te
 	require.NoError(t, os.WriteFile(out, []byte("keep-me"), 0o600))
 
 	g := bundleFailGit{inner: c, err: fmt.Errorf("simulated bundle create failure")}
-	_, err := opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: out})
+	_, err := opsbackup.Snapshot(g, out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bundle")
 
@@ -210,7 +210,7 @@ func TestSnapshot_DoesNotMoveLiveArmature_REQ_TOPTIER_S12_T1(t *testing.T) {
 	require.NotEqual(t, beforeLive, beforeTracking)
 
 	out := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	res, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+	res, err := opsbackup.Snapshot(c, out)
 	require.NoError(t, err)
 	assert.Equal(t, beforeTracking, res.Tip)
 
@@ -227,7 +227,7 @@ func TestSnapshot_BundleAdvertisesRestorableTip_REQ_TOPTIER_S12_T1(t *testing.T)
 	c := adapters.New(repo)
 	out := filepath.Join(t.TempDir(), "armature-ops.bundle")
 
-	res, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+	res, err := opsbackup.Snapshot(c, out)
 	require.NoError(t, err)
 	assert.Equal(t, tip, res.Tip)
 
@@ -242,7 +242,7 @@ func TestRestorePlan_DivergeAside_REQ_TOPTIER_S12_T1(t *testing.T) {
 	repo, origin, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	// Replace origin/_armature with an unrelated orphan tip (non-FF rewrite).
@@ -268,7 +268,7 @@ func TestRestorePlan_AbsentRemoteRef_RealAdapter_REQ_TOPTIER_S12_T1(t *testing.T
 	repo, origin, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	// Delete the shared branch on origin. Stale local tracking tip must not
@@ -288,7 +288,7 @@ func TestRestorePlan_UnreachableOrigin_FailClosed_REQ_TOPTIER_S12_T1(t *testing.
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	gittest.Git(t, repo, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "no-such-origin.git"))
@@ -312,7 +312,7 @@ func TestVerify_TruncatedBundle_RealAdapter_REQ_TOPTIER_S12_T1(t *testing.T) {
 
 	c := adapters.New(repo)
 	full := filepath.Join(t.TempDir(), "full.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: full})
+	_, err := opsbackup.Snapshot(c, full)
 	require.NoError(t, err)
 	require.NoError(t, opsbackup.Verify(c, full))
 
@@ -337,7 +337,7 @@ func TestRestorePlan_FastForward_REQ_TOPTIER_S12_T1(t *testing.T) {
 	repo, _, tip := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	plan, err := opsbackup.PlanRestore(c, bundle)
@@ -356,7 +356,7 @@ func TestRestorePlan_FastForwardAncestor_REQ_TOPTIER_S12_T1(t *testing.T) {
 
 	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "newer ops tip")
 	gittest.Git(t, repo, "push", "origin", "_armature")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	// Rewind origin to an ancestor of the recovered tip (still FF-able).
@@ -377,7 +377,7 @@ func TestRestorePlan_RecoveredStrictAncestorOfOrigin_AlreadyContained_REQ_TOPTIE
 	repo, origin, olderTip := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "older.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	// Advance origin past the bundled tip so recovered is a strict ancestor.
@@ -401,7 +401,7 @@ func TestPlanRestore_RestoreEvidenceOriginResolveFails_NotMissing_REQ_TOPTIER_S1
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	g := restoreEvidenceFailGit{inner: c, err: fmt.Errorf("resolve origin tip boom")}
@@ -416,7 +416,7 @@ func TestPlanRestore_RestoreEvidenceOriginResolveFails_NotMissing_REQ_TOPTIER_S1
 func TestSnapshot_RequiresOutput(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)
-	_, err := opsbackup.Snapshot(adapters.New(repo), opsbackup.SnapshotRequest{})
+	_, err := opsbackup.Snapshot(adapters.New(repo), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--output")
 }
@@ -427,7 +427,7 @@ func TestSnapshot_ResolveTrackingFail(t *testing.T) {
 	c := adapters.New(repo)
 	// Fail resolve of any per-run tracking destination under the sibling NS.
 	g := resolveFailGit{inner: c, failRev: "refs/remotes/origin/_armature-run", err: fmt.Errorf("resolve boom")}
-	_, err := opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: filepath.Join(t.TempDir(), "x.bundle")})
+	_, err := opsbackup.Snapshot(g, filepath.Join(t.TempDir(), "x.bundle"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve")
 }
@@ -465,7 +465,7 @@ func TestPlanRestore_RestoreEvidenceFailClosed_REQ_TOPTIER_S12_T1(t *testing.T) 
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	g := restoreEvidenceFailGit{inner: c, err: fmt.Errorf("ls-remote origin refs/heads/_armature failed (fail-closed): simulated")}
@@ -479,7 +479,7 @@ func TestPlanRestore_RestoreEvidenceLoadBundleFail(t *testing.T) {
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	g := restoreEvidenceFailGit{inner: c, err: fmt.Errorf("load bundle: simulated")}
@@ -493,7 +493,7 @@ func TestPlanRestore_AncestryFail(t *testing.T) {
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "advance recovered")
@@ -584,30 +584,36 @@ func TestSnapshot_ConcurrentDistinctTips_NoCrossWire_REQ_TOPTIER_S12_T1(t *testi
 	outB := filepath.Join(dir, "b.bundle")
 
 	var (
-		wg   sync.WaitGroup
-		resA opsbackup.SnapshotResult
-		resB opsbackup.SnapshotResult
-		errA error
-		errB error
+		wg         sync.WaitGroup
+		tipAGot    string
+		bundleAGot string
+		tipBGot    string
+		bundleBGot string
+		errA       error
+		errB       error
 	)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		resA, errA = opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: outA})
+		res, err := opsbackup.Snapshot(g, outA)
+		tipAGot, bundleAGot, errA = res.Tip, res.Bundle, err
 	}()
 	go func() {
 		defer wg.Done()
-		resB, errB = opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: outB})
+		res, err := opsbackup.Snapshot(g, outB)
+		tipBGot, bundleBGot, errB = res.Tip, res.Bundle, err
 	}()
 	wg.Wait()
 	require.NoError(t, errA)
 	require.NoError(t, errB)
-	require.True(t, (resA.Tip == tipA && resB.Tip == tipB) || (resA.Tip == tipB && resB.Tip == tipA),
-		"expected distinct tips %s/%s, got %s/%s", tipA, tipB, resA.Tip, resB.Tip)
-	require.NotEqual(t, resA.Tip, resB.Tip)
+	require.True(t, (tipAGot == tipA && tipBGot == tipB) || (tipAGot == tipB && tipBGot == tipA),
+		"expected distinct tips %s/%s, got %s/%s", tipA, tipB, tipAGot, tipBGot)
+	require.NotEqual(t, tipAGot, tipBGot)
+	assert.Equal(t, outA, bundleAGot)
+	assert.Equal(t, outB, bundleBGot)
 
-	assert.Equal(t, resA.Tip, bundleTip(t, repo, outA, opsbackup.AdvertisedRef), "bundle A must match reported tip")
-	assert.Equal(t, resB.Tip, bundleTip(t, repo, outB, opsbackup.AdvertisedRef), "bundle B must match reported tip")
+	assert.Equal(t, tipAGot, bundleTip(t, repo, outA, opsbackup.AdvertisedRef), "bundle A must match reported tip")
+	assert.Equal(t, tipBGot, bundleTip(t, repo, outB, opsbackup.AdvertisedRef), "bundle B must match reported tip")
 	assert.Empty(t, listRefs(t, repo, "refs/bundle-backup"), "no stray bundle-backup staging refs")
 	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"), "per-run tracking cleaned up")
 }
@@ -649,7 +655,7 @@ func TestRestorePlan_OverlappingSameBundle_NoCrossRead_REQ_TOPTIER_S12_T1G(t *te
 	repo, _, tip := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "seed.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	const n = 32
@@ -699,30 +705,31 @@ func TestRestorePlan_ConcurrentDistinctBundles_NoCrossWire_REQ_TOPTIER_S12_T1(t 
 	require.NoError(t, c.BundleCreateAdvertised(bundleB, tipB, opsbackup.AdvertisedRef))
 
 	var (
-		wg    sync.WaitGroup
-		planA opsbackup.RestorePlan
-		planB opsbackup.RestorePlan
-		errA  error
-		errB  error
+		wg                                             sync.WaitGroup
+		recoveredA, recoveredB, gotBundleA, gotBundleB string
+		dispA, dispB                                   opsbackup.Disposition
+		errA, errB                                     error
 	)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		planA, errA = opsbackup.PlanRestore(c, bundleA)
+		plan, err := opsbackup.PlanRestore(c, bundleA)
+		recoveredA, gotBundleA, dispA, errA = plan.Recovered, plan.Bundle, plan.Disposition, err
 	}()
 	go func() {
 		defer wg.Done()
-		planB, errB = opsbackup.PlanRestore(c, bundleB)
+		plan, err := opsbackup.PlanRestore(c, bundleB)
+		recoveredB, gotBundleB, dispB, errB = plan.Recovered, plan.Bundle, plan.Disposition, err
 	}()
 	wg.Wait()
 	require.NoError(t, errA)
 	require.NoError(t, errB)
-	assert.Equal(t, tipA, planA.Recovered)
-	assert.Equal(t, tipB, planB.Recovered)
-	assert.Equal(t, opsbackup.DispositionFastForward, planA.Disposition)
-	assert.Equal(t, opsbackup.DispositionFastForward, planB.Disposition)
-	assert.Equal(t, bundleA, planA.Bundle)
-	assert.Equal(t, bundleB, planB.Bundle)
+	assert.Equal(t, tipA, recoveredA)
+	assert.Equal(t, tipB, recoveredB)
+	assert.Equal(t, opsbackup.DispositionFastForward, dispA)
+	assert.Equal(t, opsbackup.DispositionFastForward, dispB)
+	assert.Equal(t, bundleA, gotBundleA)
+	assert.Equal(t, bundleB, gotBundleB)
 	assert.Empty(t, listRefs(t, repo, "refs/remotes/backup/_armature-run"), "per-run scratch cleaned up")
 	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"), "per-run tracking cleaned up")
 	assert.Empty(t, listRefs(t, repo, "refs/bundle-backup"), "no stray bundle-backup staging refs")
@@ -736,7 +743,7 @@ func TestRestorePlan_LegacyScratchParentStillWorks_REQ_TOPTIER_S12_T1F(t *testin
 	repo, _, tip := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	// Pre-create the legacy fixed tip that nested children cannot coexist with.
@@ -760,7 +767,7 @@ func TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F(t *testin
 	repo, _, tip := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	staleTrack := "refs/remotes/origin/_armature-run/deadbeefcafebabe"
@@ -773,7 +780,7 @@ func TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F(t *testin
 	gittest.Git(t, repo, "update-ref", staleTmpOrigin, tip)
 
 	out := filepath.Join(t.TempDir(), "after-crash.bundle")
-	res, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+	res, err := opsbackup.Snapshot(c, out)
 	require.NoError(t, err)
 	assert.Equal(t, tip, res.Tip)
 	require.NoError(t, opsbackup.Verify(c, out))
@@ -795,7 +802,7 @@ func TestRestorePlan_DurableOutputResolvesAfterExit_REQ_TOPTIER_S12_T1F(t *testi
 	repo, _, tip := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	_, err := opsbackup.Snapshot(c, bundle)
 	require.NoError(t, err)
 
 	plan, err := opsbackup.PlanRestore(c, bundle)
@@ -818,7 +825,7 @@ func TestOpsBackup_ParallelAllVerbsOverlap_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	c := adapters.New(repo)
 	dir := t.TempDir()
 	seed := filepath.Join(dir, "seed.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: seed})
+	_, err := opsbackup.Snapshot(c, seed)
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
@@ -826,11 +833,11 @@ func TestOpsBackup_ParallelAllVerbsOverlap_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	wg.Add(6)
 	go func() {
 		defer wg.Done()
-		_, errs[0] = opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: filepath.Join(dir, "s1.bundle")})
+		_, errs[0] = opsbackup.Snapshot(c, filepath.Join(dir, "s1.bundle"))
 	}()
 	go func() {
 		defer wg.Done()
-		_, errs[1] = opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: filepath.Join(dir, "s2.bundle")})
+		_, errs[1] = opsbackup.Snapshot(c, filepath.Join(dir, "s2.bundle"))
 	}()
 	go func() {
 		defer wg.Done()
@@ -842,17 +849,23 @@ func TestOpsBackup_ParallelAllVerbsOverlap_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		var plan opsbackup.RestorePlan
-		plan, errs[4] = opsbackup.PlanRestore(c, seed)
-		if errs[4] == nil && plan.Recovered != tip {
+		plan, err := opsbackup.PlanRestore(c, seed)
+		if err != nil {
+			errs[4] = err
+			return
+		}
+		if plan.Recovered != tip {
 			errs[4] = fmt.Errorf("unexpected recovered tip %s", plan.Recovered)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		var plan opsbackup.RestorePlan
-		plan, errs[5] = opsbackup.PlanRestore(c, seed)
-		if errs[5] == nil && plan.Recovered != tip {
+		plan, err := opsbackup.PlanRestore(c, seed)
+		if err != nil {
+			errs[5] = err
+			return
+		}
+		if plan.Recovered != tip {
 			errs[5] = fmt.Errorf("unexpected recovered tip %s", plan.Recovered)
 		}
 	}()
@@ -873,7 +886,7 @@ func TestOpsBackup_ParallelMovingTip_NoSharedTrackingLock_REQ_TOPTIER_S12_T1(t *
 
 	dir := t.TempDir()
 	seed := filepath.Join(dir, "seed.bundle")
-	seedRes, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: seed})
+	seedRes, err := opsbackup.Snapshot(c, seed)
 	require.NoError(t, err)
 	require.Equal(t, tip0, seedRes.Tip)
 
@@ -940,7 +953,7 @@ func TestOpsBackup_ParallelMovingTip_NoSharedTrackingLock_REQ_TOPTIER_S12_T1(t *
 			switch i % 3 {
 			case 0:
 				out := filepath.Join(dir, fmt.Sprintf("snap-%d.bundle", i))
-				res, snapErr := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+				res, snapErr := opsbackup.Snapshot(c, out)
 				if snapErr != nil {
 					errs[i] = snapErr
 					return
@@ -1016,7 +1029,7 @@ func TestSweepAgedOutputTemps_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	repo, _, tip := setupOpsOrigin(t)
 	c := adapters.New(repo)
 	out := filepath.Join(dir, "final.bundle")
-	res, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+	res, err := opsbackup.Snapshot(c, out)
 	require.NoError(t, err)
 	assert.Equal(t, tip, res.Tip)
 	_, err = os.Stat(stale)
