@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	// OpsBranch is the unprotected orphan coordination branch.
-	OpsBranch = "_armature"
+	// opsBranch is the unprotected orphan coordination branch.
+	opsBranch = "_armature"
 	// AdvertisedRef is the tip name written into the bundle header for restore.
 	AdvertisedRef = "refs/heads/_armature"
 	// AsideRef is the full aside ref name.
@@ -58,8 +58,9 @@ func (d Disposition) String() string {
 	}
 }
 
-// Git is the adapter surface opsbackup needs. *adapters.Client satisfies it.
-type Git interface {
+// git is the adapter surface Snapshot, Verify, and PlanRestore need.
+// *adapters.Client satisfies it.
+type git interface {
 	BeginPerRunRef(ns string) (ref string, release func(), err error)
 	FetchBranchToRef(branch, dstRef string) error
 	ResolveRevision(rev string) (string, error)
@@ -72,21 +73,16 @@ type Git interface {
 	) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error)
 }
 
-// SnapshotRequest is the input for Snapshot.
-type SnapshotRequest struct {
-	OutputPath string
-}
-
-// SnapshotResult is the durable tip copy produced by Snapshot.
-type SnapshotResult struct {
+// snapshotResult is the durable tip copy produced by Snapshot.
+type snapshotResult struct {
 	Tip    string
 	Bundle string
 }
 
-// RestorePlan is the printed I2 disposition for a recovered tip.
+// restorePlan is the printed I2 disposition for a recovered tip.
 // Only durable names: recovered SHA, input bundle path, optional aside publish
 // target. Per-run staging refs are never part of the plan output.
-type RestorePlan struct {
+type restorePlan struct {
 	Recovered   string
 	Bundle      string
 	Disposition Disposition
@@ -101,38 +97,38 @@ var ErrDiverge = errors.New("ops-backup: recovered tip diverges from origin/_arm
 // advertises refs/heads/_armature. Failed refresh aborts before creating the
 // output. Live refs/heads/_armature is never moved. On bundle failure a
 // pre-existing --output path is left untouched (temp file + rename).
-func Snapshot(g Git, req SnapshotRequest) (SnapshotResult, error) {
-	out := strings.TrimSpace(req.OutputPath)
+func Snapshot(g git, outputPath string) (snapshotResult, error) {
+	out := strings.TrimSpace(outputPath)
 	if out == "" {
-		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: --output is required")
+		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: --output is required")
 	}
 	runRef, releaseRun, err := g.BeginPerRunRef(runTrackingNS)
 	if err != nil {
-		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: run tracking ref: %w", err)
+		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: run tracking ref: %w", err)
 	}
 	defer releaseRun()
-	if err := g.FetchBranchToRef(OpsBranch, runRef); err != nil {
-		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
+	if err := g.FetchBranchToRef(opsBranch, runRef); err != nil {
+		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: refresh origin/%s failed (fail-closed): %w", opsBranch, err)
 	}
 	tip, err := g.ResolveRevision(runRef)
 	if err != nil {
-		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: resolve %s: %w", runRef, err)
+		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: resolve %s: %w", runRef, err)
 	}
 	releaseRun()
 
 	tmp, cleanup, err := snapshotTempPath(out)
 	if err != nil {
-		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: temp output: %w", err)
+		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: temp output: %w", err)
 	}
 	defer cleanup()
 
 	if err := g.BundleCreateAdvertised(tmp, tip, AdvertisedRef); err != nil {
-		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: bundle: %w", err)
+		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: bundle: %w", err)
 	}
 	if err := os.Rename(tmp, out); err != nil {
-		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: finalize bundle: %w", err)
+		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: finalize bundle: %w", err)
 	}
-	return SnapshotResult{Tip: tip, Bundle: out}, nil
+	return snapshotResult{Tip: tip, Bundle: out}, nil
 }
 
 func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) {
@@ -183,7 +179,7 @@ func sweepAgedOutputTemps(dir string) {
 
 // Verify confirms a bundle advertises AdvertisedRef and that its object pack
 // is restorable (fetch into a throwaway bare — not header-only list-heads).
-func Verify(g Git, bundlePath string) error {
+func Verify(g git, bundlePath string) error {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
 		return fmt.Errorf("ops-backup verify: bundle path is required")
@@ -226,22 +222,22 @@ func classifyRestore(originMissing bool, originTip, recovered string, originAncO
 // Unreachable origin, bundle/ancestry errors, and other git failures stay
 // fail-closed (mapped error, no success disposition). Printed fields are
 // durable only (recovered SHA, bundle path, optional aside publish name).
-func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
+func PlanRestore(g git, bundlePath string) (restorePlan, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: --from is required")
+		return restorePlan{}, fmt.Errorf("ops-backup restore-plan: --from is required")
 	}
 	if err := Verify(g, bundlePath); err != nil {
-		return RestorePlan{}, err
+		return restorePlan{}, err
 	}
-	originMissing, originTip, recovered, originAnc, recoveredAnc, err := g.RestoreEvidence(bundlePath, AdvertisedRef, OpsBranch)
+	originMissing, originTip, recovered, originAnc, recoveredAnc, err := g.RestoreEvidence(bundlePath, AdvertisedRef, opsBranch)
 	if err != nil {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: %w", err)
+		return restorePlan{}, fmt.Errorf("ops-backup restore-plan: %w", err)
 	}
 	if recovered == "" {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: resolve recovered tip: empty SHA")
+		return restorePlan{}, fmt.Errorf("ops-backup restore-plan: resolve recovered tip: empty SHA")
 	}
-	plan := RestorePlan{
+	plan := restorePlan{
 		Recovered: recovered,
 		Bundle:    bundlePath,
 	}

@@ -75,7 +75,7 @@ func (g *beginFailGit) BeginPerRunRef(string) (string, func(), error) {
 
 func TestSnapshot_BeginPerRunRefFails_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
-	_, err := opsbackup.Snapshot(&beginFailGit{}, opsbackup.SnapshotRequest{OutputPath: t.TempDir() + "/out.bundle"})
+	_, err := opsbackup.Snapshot(&beginFailGit{}, t.TempDir()+"/out.bundle")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "run tracking ref")
 }
@@ -130,7 +130,7 @@ func TestSnapshot_FakeGitTable_REQ_TOPTIER_S12_T1(t *testing.T) {
 			if tc.output != "" {
 				out = t.TempDir() + "/" + tc.output
 			}
-			res, err := opsbackup.Snapshot(tc.g, opsbackup.SnapshotRequest{OutputPath: out})
+			res, err := opsbackup.Snapshot(tc.g, out)
 			if tc.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.wantErr)
