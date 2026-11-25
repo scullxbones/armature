@@ -93,7 +93,7 @@ var ErrDiverge = errors.New("ops-backup: recovered tip diverges from origin/_arm
 // advertises refs/heads/_armature. Failed refresh aborts before creating the
 // output. Live refs/heads/_armature is never moved. On bundle failure a
 // pre-existing --output path is left untouched (temp file + rename).
-func Snapshot(g git, outputPath string) (_ snapshotResult, err error) {
+func Snapshot(g git, outputPath string) (snapshotResult, error) {
 	out := strings.TrimSpace(outputPath)
 	if out == "" {
 		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: --output is required")
@@ -116,11 +116,7 @@ func Snapshot(g git, outputPath string) (_ snapshotResult, err error) {
 	if err != nil {
 		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: temp output: %w", err)
 	}
-	defer func() {
-		if cerr := cleanup(); cerr != nil && err == nil {
-			err = fmt.Errorf("ops-backup snapshot: remove temp: %w", cerr)
-		}
-	}()
+	defer cleanup()
 
 	if err := g.BundleCreateAdvertised(tmp, tip, AdvertisedRef); err != nil {
 		return snapshotResult{}, fmt.Errorf("ops-backup snapshot: bundle: %w", err)
@@ -131,38 +127,29 @@ func Snapshot(g git, outputPath string) (_ snapshotResult, err error) {
 	return snapshotResult{Tip: tip, Bundle: out}, nil
 }
 
-func snapshotTempPath(finalPath string) (tmp string, cleanup func() error, err error) {
-	noop := func() error { return nil }
+func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) {
 	dir := filepath.Dir(finalPath)
 	if dir == "" || dir == "." {
 		dir = "."
 	}
 	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
-		return "", noop, mkErr
+		return "", func() {}, mkErr
 	}
 	// Reclaim crash leftovers next to --output before creating a new temp.
 	sweepAgedOutputTemps(dir)
 	f, err := os.CreateTemp(dir, ".armature-ops-backup-*.bundle")
 	if err != nil {
-		return "", noop, err
+		return "", func() {}, err
 	}
 	tmp = f.Name()
-	if closeErr := f.Close(); closeErr != nil {
-		if rmErr := os.Remove(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
-			return "", noop, errors.Join(closeErr, rmErr)
-		}
-		return "", noop, closeErr
-	}
+	_ = f.Close() //nolint:errcheck // content written by git bundle create
 	cleaned := false
-	cleanup = func() error {
+	cleanup = func() {
 		if cleaned {
-			return nil
+			return
 		}
 		cleaned = true
-		if rmErr := os.Remove(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
-			return rmErr
-		}
-		return nil
+		_ = os.Remove(tmp) //nolint:errcheck // best-effort; rename success leaves tmp gone
 	}
 	return tmp, cleanup, nil
 }
@@ -181,9 +168,7 @@ func sweepAgedOutputTemps(dir string) {
 			continue
 		}
 		if now-info.ModTime().Unix() > 3600 {
-			if rmErr := os.Remove(p); rmErr != nil && !os.IsNotExist(rmErr) {
-				continue
-			}
+			_ = os.Remove(p) //nolint:errcheck // best-effort crash leftover sweep
 		}
 	}
 }
