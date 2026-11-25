@@ -58,8 +58,6 @@ func (d Disposition) String() string {
 	}
 }
 
-// git is the adapter surface Snapshot, Verify, and PlanRestore need.
-// *adapters.Client satisfies it.
 type git interface {
 	BeginPerRunRef(ns string) (ref string, release func(), err error)
 	FetchBranchToRef(branch, dstRef string) error
@@ -73,13 +71,11 @@ type git interface {
 	) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error)
 }
 
-// snapshotResult is the durable tip copy produced by Snapshot.
 type snapshotResult struct {
 	Tip    string
 	Bundle string
 }
 
-// restorePlan is the printed I2 disposition for a recovered tip.
 // Only durable names: recovered SHA, input bundle path, optional aside publish
 // target. Per-run staging refs are never part of the plan output.
 type restorePlan struct {
