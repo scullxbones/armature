@@ -195,6 +195,8 @@ func classifyRestore(originMissing bool, originTip, recovered string, originAncO
 // PlanRestore verifies a bundle, then compares its tip to origin/_armature via
 // RestoreEvidence (clone-local network ops + per-call refs/armature-tmp staging,
 // so overlapping restore-plan runs cannot cross-read each other's refs).
+// Divergence returns that plan and ErrDiverge. Other git failures return an
+// error and an empty plan, not DispositionMissing.
 func PlanRestore(g git, bundlePath string) (restorePlan, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
