@@ -1,6 +1,4 @@
 // Package stats computes derived metrics from the append-only ops log.
-// Cost estimates (G1.2) turn recorded token counts into per-story and per-wave
-// dollar totals using a configurable per-model rate table.
 package stats
 
 import (
@@ -15,7 +13,6 @@ import (
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
-// defaultModel is the rate-table key used when a usage record has no model.
 const defaultModel = "default"
 
 // DefaultRatesFile is the optional repo-local rate table under the ops worktree.
@@ -26,17 +23,14 @@ type rate struct {
 	OutputUSDPerMTok float64 `json:"output_usd_per_mtok"`
 }
 
-// rateTable is the per-model price list Estimate and ResolveRates share.
 type rateTable map[string]rate
 
-// usage is one recorded token observation (outcome or assessment). Zero counts
-// are unset and never appear here.
 type usage struct {
 	IssueID      string
 	Model        string
 	InputTokens  int
 	OutputTokens int
-	Source       string // "outcome" or "assessment"
+	Source       string
 }
 
 type IssueInfo struct {
@@ -110,7 +104,6 @@ func ResolveRates(ratesPath, issuesDir string) (rateTable, error) {
 	return defaultRates(), nil
 }
 
-// collectUsage extracts token-bearing outcome and assessment records. Zero is unset.
 // Assessment attestations are deduplicated by issue ID + ResultFingerprint, matching
 // materialize.applyAssessmentAttested, so concurrent idempotent appends are billed once.
 func collectUsage(opList []ops.Op) []usage {
@@ -275,12 +268,10 @@ func Rollup(report Report, rootID string, issues map[string]IssueInfo) totals {
 	return out
 }
 
-// FormatSpend is the human adjunct line used by arm show and stats.
 func FormatSpend(t totals) string {
 	return fmt.Sprintf("Spend-to-date: %s (%d in / %d out)", FormatUSD(t.USD), t.InputTokens, t.OutputTokens)
 }
 
-// FormatUSD renders a dollar estimate with six decimal places.
 func FormatUSD(usd float64) string {
 	return fmt.Sprintf("$%.6f", usd)
 }
