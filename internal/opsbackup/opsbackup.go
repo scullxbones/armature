@@ -1,6 +1,5 @@
 // Package opsbackup implements durable snapshot / verify / restore-plan for the
-// published `_armature` tip. Policy (fail-closed refresh, I2 aside on diverge,
-// bare-temp tip advertisement) lives here; cmd/armature is a thin cobra port.
+// published `_armature` tip.
 package opsbackup
 
 import (
@@ -18,13 +17,11 @@ const (
 	opsBranch = "_armature"
 	// AdvertisedRef is the tip name written into the bundle header for restore.
 	AdvertisedRef = "refs/heads/_armature"
-	// AsideRef is the full aside ref name.
-	AsideRef = "refs/heads/_armature-recovered"
+	AsideRef      = "refs/heads/_armature-recovered"
 
-	// runTrackingNS is the sibling namespace for per-run origin tip fetches
-	// during snapshot. Never nest under refs/remotes/origin/_armature — Git
-	// cannot create children while a parent ref exists, and concurrent crons
-	// must not share one mutable tip.
+	// Never nest under refs/remotes/origin/_armature. Git cannot create
+	// children while a parent ref exists, and concurrent crons must not
+	// share one mutable tip.
 	runTrackingNS = "refs/remotes/origin/_armature-run"
 )
 
@@ -39,7 +36,7 @@ const (
 	// DispositionDivergeAside: push only to _armature-recovered; escalate.
 	DispositionDivergeAside
 	// DispositionAlreadyContained: recovered tip is already in origin history
-	// (strict ancestor of current tip). Exit 0; no publish / no aside.
+	// (strict ancestor of current tip). No publish / no aside.
 	DispositionAlreadyContained
 )
 
@@ -64,8 +61,6 @@ type git interface {
 	ResolveRevision(rev string) (string, error)
 	BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error
 	BundleVerifyRestorable(bundlePath, wantRef string) error
-	// RestoreEvidence compares origin+bundle tips via clone-local network ops
-	// and refs/armature-tmp/<run-id>/ staging (lease + crash-safe sweep).
 	RestoreEvidence(
 		bundlePath, advertiseRef, opsBranch string,
 	) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error)
@@ -92,7 +87,7 @@ var ErrDiverge = errors.New("ops-backup: recovered tip diverges from origin/_arm
 // writes refs/remotes/origin/_armature), then writes a bundle that
 // advertises refs/heads/_armature. Failed refresh aborts before creating the
 // output. Live refs/heads/_armature is never moved. On bundle failure a
-// pre-existing --output path is left untouched (temp file + rename).
+// pre-existing --output path is left untouched.
 func Snapshot(g git, outputPath string) (snapshotResult, error) {
 	out := strings.TrimSpace(outputPath)
 	if out == "" {
@@ -135,27 +130,25 @@ func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) 
 	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
 		return "", func() {}, mkErr
 	}
-	// Reclaim crash leftovers next to --output before creating a new temp.
 	sweepAgedOutputTemps(dir)
 	f, err := os.CreateTemp(dir, ".armature-ops-backup-*.bundle")
 	if err != nil {
 		return "", func() {}, err
 	}
 	tmp = f.Name()
-	_ = f.Close() //nolint:errcheck // content written by git bundle create
+	swallowErr(f.Close())
 	cleaned := false
 	cleanup = func() {
 		if cleaned {
 			return
 		}
 		cleaned = true
-		_ = os.Remove(tmp) //nolint:errcheck // best-effort; rename success leaves tmp gone
+		swallowErr(os.Remove(tmp))
 	}
 	return tmp, cleanup, nil
 }
 
-// sweepAgedOutputTemps reclaims crash leftovers next to --output. Age ceiling
-// matches adapters.runLeaseMaxAgeSec (1h). Concurrent live temps are seconds old.
+// Age ceiling matches adapters.runLeaseMaxAgeSec (1h). Concurrent live temps are seconds old.
 func sweepAgedOutputTemps(dir string) {
 	matches, err := filepath.Glob(filepath.Join(dir, ".armature-ops-backup-*.bundle"))
 	if err != nil {
@@ -168,7 +161,7 @@ func sweepAgedOutputTemps(dir string) {
 			continue
 		}
 		if now-info.ModTime().Unix() > 3600 {
-			_ = os.Remove(p) //nolint:errcheck // best-effort crash leftover sweep
+			swallowErr(os.Remove(p))
 		}
 	}
 }
@@ -186,10 +179,6 @@ func Verify(g git, bundlePath string) error {
 	return nil
 }
 
-// classifyRestore picks an I2 disposition from positive origin evidence and a
-// recovered tip. recovered strict ancestor of current origin → already-contained
-// (exit 0, no aside): the tip is already in published history. Unrelated tips
-// remain diverge→aside.
 func classifyRestore(originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool) (Disposition, string) {
 	if originMissing {
 		return DispositionMissing, ""
@@ -206,18 +195,6 @@ func classifyRestore(originMissing bool, originTip, recovered string, originAncO
 // PlanRestore verifies a bundle, then compares its tip to origin/_armature via
 // RestoreEvidence (clone-local network ops + per-call refs/armature-tmp staging,
 // so overlapping restore-plan runs cannot cross-read each other's refs).
-//
-// Disposition audit (success only on positive evidence):
-//   - missing: ls-remote reports origin/_armature absent (structural)
-//   - fast-forward: origin tip resolved and equals recovered, or is an ancestor
-//   - already-contained: recovered is a strict ancestor of current origin
-//     (exit 0; no aside — tip already in published history)
-//   - diverge→_armature-recovered: origin tip resolved and histories are
-//     unrelated (aside only; ErrDiverge)
-//
-// Unreachable origin, bundle/ancestry errors, and other git failures stay
-// fail-closed (mapped error, no success disposition). Printed fields are
-// durable only (recovered SHA, bundle path, optional aside publish name).
 func PlanRestore(g git, bundlePath string) (restorePlan, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
@@ -243,3 +220,5 @@ func PlanRestore(g git, bundlePath string) (restorePlan, error) {
 	}
 	return plan, nil
 }
+
+func swallowErr(err error) { _ = err }
