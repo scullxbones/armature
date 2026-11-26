@@ -1834,7 +1834,7 @@
       ]
     },
     "internal/stats": {
-      "count": 23,
+      "count": 16,
       "names": [
         "DefaultRatesFile",
         "Estimate",
@@ -1846,19 +1846,12 @@
         "IssueInfo.PreferredModel",
         "IssueInfo.Scope",
         "IssueInfo.Type",
-        "RateTable",
         "Report",
         "Report.Rates",
         "Report.Stories",
         "Report.Waves",
         "ResolveRates",
-        "Rollup",
-        "Totals",
-        "Totals.ID",
-        "Totals.InputTokens",
-        "Totals.Issues",
-        "Totals.OutputTokens",
-        "Totals.USD"
+        "Rollup"
       ]
     },
     "internal/strictjson": {

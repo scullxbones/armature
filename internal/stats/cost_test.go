@@ -129,7 +129,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 	assert.NotContains(t, string(raw), "byIssue")
 
 	require.Len(t, report.Stories, 2)
-	byStory := map[string]Totals{}
+	byStory := map[string]totals{}
 	for _, s := range report.Stories {
 		byStory[s.ID] = s
 	}
