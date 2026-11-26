@@ -26,8 +26,8 @@ type rate struct {
 	OutputUSDPerMTok float64 `json:"output_usd_per_mtok"`
 }
 
-// RateTable is the per-model price list Estimate and ResolveRates share.
-type RateTable map[string]rate
+// rateTable is the per-model price list Estimate and ResolveRates share.
+type rateTable map[string]rate
 
 // usage is one recorded token observation (outcome or assessment). Zero counts
 // are unset and never appear here.
@@ -47,7 +47,7 @@ type IssueInfo struct {
 	Scope          []string
 }
 
-type Totals struct {
+type totals struct {
 	ID           string   `json:"id"`
 	USD          float64  `json:"usd"`
 	InputTokens  int      `json:"input_tokens"`
@@ -57,18 +57,18 @@ type Totals struct {
 
 // Report is the --cost view: per-story and per-wave estimates.
 type Report struct {
-	Stories []Totals  `json:"stories"`
-	Waves   []Totals  `json:"waves"`
-	Rates   RateTable `json:"rates"`
-	byIssue map[string]Totals
+	Stories []totals  `json:"stories"`
+	Waves   []totals  `json:"waves"`
+	Rates   rateTable `json:"rates"`
+	byIssue map[string]totals
 }
 
 type rateFile struct {
 	Models map[string]rate `json:"models"`
 }
 
-func defaultRates() RateTable {
-	return RateTable{
+func defaultRates() rateTable {
+	return rateTable{
 		"claude-sonnet-4-5": {InputUSDPerMTok: 3.00, OutputUSDPerMTok: 15.00},
 		"claude-haiku-4-5":  {InputUSDPerMTok: 1.00, OutputUSDPerMTok: 5.00},
 		"claude-opus-4-5":   {InputUSDPerMTok: 15.00, OutputUSDPerMTok: 75.00},
@@ -78,7 +78,7 @@ func defaultRates() RateTable {
 	}
 }
 
-func loadRateTable(path string) (RateTable, error) {
+func loadRateTable(path string) (rateTable, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("read rate table: %w", err)
@@ -97,7 +97,7 @@ func loadRateTable(path string) (RateTable, error) {
 // ResolveRates returns flag path, else IssuesDir/cost-rates.json if present, else
 // built-in list prices for common 2026-era frontier models (not a billing guarantee).
 // Unknown models fall back to the "default" entry after merge with that table.
-func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
+func ResolveRates(ratesPath, issuesDir string) (rateTable, error) {
 	if ratesPath != "" {
 		return loadRateTable(ratesPath)
 	}
@@ -165,7 +165,7 @@ func usdFromTokens(inputTokens, outputTokens int, price rate) float64 {
 		float64(outputTokens)/million*price.OutputUSDPerMTok
 }
 
-func rateFor(table RateTable, model, preferred string) rate {
+func rateFor(table rateTable, model, preferred string) rate {
 	if table == nil {
 		table = defaultRates()
 	}
@@ -182,15 +182,15 @@ func rateFor(table RateTable, model, preferred string) rate {
 
 // Estimate collects token-bearing outcome and assessment ops, then aggregates
 // them into per-issue, per-story, and per-wave dollar totals.
-func Estimate(opList []ops.Op, issues map[string]IssueInfo, rates RateTable) Report {
+func Estimate(opList []ops.Op, issues map[string]IssueInfo, rates rateTable) Report {
 	return estimate(collectUsage(opList), issues, rates)
 }
 
-func estimate(usages []usage, issues map[string]IssueInfo, rates RateTable) Report {
+func estimate(usages []usage, issues map[string]IssueInfo, rates rateTable) Report {
 	if rates == nil {
 		rates = defaultRates()
 	}
-	byIssue := make(map[string]Totals)
+	byIssue := make(map[string]totals)
 	for _, u := range usages {
 		info := issues[u.IssueID]
 		preferred := ""
@@ -206,7 +206,7 @@ func estimate(usages []usage, issues map[string]IssueInfo, rates RateTable) Repo
 		byIssue[u.IssueID] = cur
 	}
 
-	storyBuckets := make(map[string]Totals)
+	storyBuckets := make(map[string]totals)
 	for issueID, tot := range byIssue {
 		root := storyRoot(issueID, issues)
 		bucket := storyBuckets[root]
@@ -263,8 +263,8 @@ func under(issueID, rootID string, issues map[string]IssueInfo) bool {
 }
 
 // Rollup sums spend for rootID and every descendant.
-func Rollup(report Report, rootID string, issues map[string]IssueInfo) Totals {
-	out := Totals{ID: rootID}
+func Rollup(report Report, rootID string, issues map[string]IssueInfo) totals {
+	out := totals{ID: rootID}
 	for id, tot := range report.byIssue {
 		if under(id, rootID, issues) {
 			out.InputTokens += tot.InputTokens
@@ -276,7 +276,7 @@ func Rollup(report Report, rootID string, issues map[string]IssueInfo) Totals {
 }
 
 // FormatSpend is the human adjunct line used by arm show and stats.
-func FormatSpend(t Totals) string {
+func FormatSpend(t totals) string {
 	return fmt.Sprintf("Spend-to-date: %s (%d in / %d out)", FormatUSD(t.USD), t.InputTokens, t.OutputTokens)
 }
 
@@ -285,20 +285,20 @@ func FormatUSD(usd float64) string {
 	return fmt.Sprintf("$%.6f", usd)
 }
 
-func sortedTotals(buckets map[string]Totals) []Totals {
+func sortedTotals(buckets map[string]totals) []totals {
 	ids := make([]string, 0, len(buckets))
 	for id := range buckets {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	out := make([]Totals, 0, len(ids))
+	out := make([]totals, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, buckets[id])
 	}
 	return out
 }
 
-func partitionWaves(byIssue map[string]Totals, issues map[string]IssueInfo) []Totals {
+func partitionWaves(byIssue map[string]totals, issues map[string]IssueInfo) []totals {
 	ids := make([]string, 0, len(byIssue))
 	for id := range byIssue {
 		ids = append(ids, id)
@@ -320,15 +320,15 @@ func partitionWaves(byIssue map[string]Totals, issues map[string]IssueInfo) []To
 		}
 	}
 
-	out := make([]Totals, 0, len(waves))
+	out := make([]totals, 0, len(waves))
 	for i, members := range waves {
 		out = append(out, sumMembers(members, byIssue, i+1))
 	}
 	return out
 }
 
-func sumMembers(members []string, byIssue map[string]Totals, waveN int) Totals {
-	tot := Totals{ID: fmt.Sprintf("wave-%d", waveN), Issues: append([]string(nil), members...)}
+func sumMembers(members []string, byIssue map[string]totals, waveN int) totals {
+	tot := totals{ID: fmt.Sprintf("wave-%d", waveN), Issues: append([]string(nil), members...)}
 	for _, id := range members {
 		item := byIssue[id]
 		tot.InputTokens += item.InputTokens
