@@ -15,6 +15,13 @@ import (
 
 const defaultModel = "default"
 
+type usageSource string
+
+const (
+	usageSourceOutcome    usageSource = "outcome"
+	usageSourceAssessment usageSource = "assessment"
+)
+
 // DefaultRatesFile is the optional repo-local rate table under the ops worktree.
 const DefaultRatesFile = "cost-rates.json"
 
@@ -30,7 +37,7 @@ type usage struct {
 	Model        string
 	InputTokens  int
 	OutputTokens int
-	Source       string
+	Source       usageSource
 }
 
 type IssueInfo struct {
@@ -120,7 +127,7 @@ func collectUsage(opList []ops.Op) []usage {
 				Model:        op.Payload.PreferredModel,
 				InputTokens:  op.Payload.InputTokens,
 				OutputTokens: op.Payload.OutputTokens,
-				Source:       "outcome",
+				Source:       usageSourceOutcome,
 			})
 		case ops.OpAssessmentAttested:
 			var att attestation.AssessmentAttestation
@@ -140,7 +147,7 @@ func collectUsage(opList []ops.Op) []usage {
 				Model:        att.ModelIdentity,
 				InputTokens:  att.InputTokens,
 				OutputTokens: att.OutputTokens,
-				Source:       "assessment",
+				Source:       usageSourceAssessment,
 			})
 		}
 	}
@@ -187,7 +194,7 @@ func estimate(usages []usage, issues map[string]IssueInfo, rates rateTable) Repo
 	for _, u := range usages {
 		info := issues[u.IssueID]
 		preferred := ""
-		if u.Source != "assessment" {
+		if u.Source != usageSourceAssessment {
 			preferred = info.PreferredModel
 		}
 		rate := rateFor(rates, u.Model, preferred)

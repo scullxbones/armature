@@ -104,9 +104,9 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 
 	usages := collectUsage(opList)
 	require.Len(t, usages, 4, "zero/omitted token fields must not produce usage records")
-	assert.Equal(t, "outcome", usages[0].Source)
-	assert.Equal(t, "assessment", usages[1].Source)
-	assert.Equal(t, "assessment", usages[3].Source)
+	assert.Equal(t, "outcome", string(usages[0].Source))
+	assert.Equal(t, "assessment", string(usages[1].Source))
+	assert.Equal(t, "assessment", string(usages[3].Source))
 	assert.Empty(t, usages[3].Model)
 
 	issues := map[string]IssueInfo{
