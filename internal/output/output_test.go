@@ -104,7 +104,7 @@ func TestShowPrintsHostNames_REQ_HOSTREF_S1_T7(t *testing.T) {
 	t.Run("json prints ordered names role and current without body", func(t *testing.T) {
 		t.Parallel()
 		got := MarshalIssue(issue)
-		require.Equal(t, []HostRefJSON{
+		require.Equal(t, []HostRefFact{
 			{URL: urlA, Role: "support"},
 			{URL: urlB, Role: "engineering", Current: true},
 		}, got.HostRefs)

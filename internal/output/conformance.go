@@ -31,7 +31,7 @@ type Command struct {
 type Mode struct {
 	Path     string
 	Selector string
-	Channel  Channel
+	Channel  channel
 	Citation string
 	Bind     func(m Mode, golden []byte, stdout, stderr io.Writer) error
 }
@@ -206,12 +206,12 @@ func modesForCommand(path string, ann map[string]string) []Mode {
 	if ann != nil {
 		citation = strings.TrimSpace(ann[ArtifactCitationKey])
 	}
-	marked := Channel(ann[ChannelAnnotationKey]) == ChannelArtifactOutput && citation != ""
+	marked := channel(ann[channelAnnotationKey]) == ChannelArtifactOutput && citation != ""
 	if !marked {
 		return []Mode{{Path: path, Channel: ChannelAgentFacing}}
 	}
-	anySet := splitCSV(ann[ArtifactWhenAnyFlagSetKey])
-	allUnset := splitCSV(ann[ArtifactWhenAllFlagsUnsetKey])
+	anySet := splitCSV(ann[artifactWhenAnyFlagSetKey])
+	allUnset := splitCSV(ann[artifactWhenAllFlagsUnsetKey])
 	if len(anySet) == 0 && len(allUnset) == 0 {
 		return []Mode{{Path: path, Channel: ChannelArtifactOutput, Citation: citation}}
 	}

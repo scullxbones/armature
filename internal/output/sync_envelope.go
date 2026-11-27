@@ -28,8 +28,8 @@ func syncKindRank() map[string]int {
 	}
 }
 
-// SyncHelp returns help[0] as the most actionable arm command for rows.
-func SyncHelp(rows []SyncIssue) []string {
+// syncHelp returns help[0] as the most actionable arm command for rows.
+func syncHelp(rows []SyncIssue) []string {
 	if len(rows) == 0 {
 		return []string{syncHelpEmpty}
 	}
@@ -55,7 +55,7 @@ func syncKindRankOrLast(kind string) int {
 
 // WriteSyncEnvelope emits {count,issues,help} for arm sync and the post-merge hook.
 func WriteSyncEnvelope(w io.Writer, rows []SyncIssue) error {
-	env, err := NewEnvelope("issues", rows, SyncHelp(rows))
+	env, err := NewEnvelope("issues", rows, syncHelp(rows))
 	if err != nil {
 		return err
 	}

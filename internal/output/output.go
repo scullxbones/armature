@@ -8,12 +8,6 @@ import (
 	"strings"
 )
 
-type HostRefJSON struct {
-	URL     string `json:"url"`
-	Role    string `json:"role,omitempty"`
-	Current bool   `json:"current,omitempty"`
-}
-
 type IssueJSON struct {
 	ID                     string          `json:"id"`
 	Title                  string          `json:"title"`
@@ -30,7 +24,7 @@ type IssueJSON struct {
 	Blocks                 []string        `json:"blocks,omitempty"`
 	Acceptance             json.RawMessage `json:"acceptance,omitempty"`
 	Notes                  []string        `json:"notes,omitempty"`
-	HostRefs               []HostRefJSON   `json:"host_refs,omitempty"`
+	HostRefs               []HostRefFact   `json:"host_refs,omitempty"`
 	AssessmentAttestations json.RawMessage `json:"assessment_attestations,omitempty"`
 	Branch                 string          `json:"branch,omitempty"`
 	Base                   string          `json:"base,omitempty"`
@@ -50,12 +44,9 @@ func MarshalIssue(issue IssueFacts) IssueJSON {
 			noteTexts = append(noteTexts, n.Msg)
 		}
 	}
-	hostRefs := make([]HostRefJSON, 0, len(issue.HostRefs))
-	for _, ref := range issue.HostRefs {
-		hostRefs = append(hostRefs, HostRefJSON(ref))
-	}
-	if len(hostRefs) == 0 {
-		hostRefs = nil
+	var hostRefs []HostRefFact
+	if len(issue.HostRefs) > 0 {
+		hostRefs = append([]HostRefFact(nil), issue.HostRefs...)
 	}
 
 	return IssueJSON{
