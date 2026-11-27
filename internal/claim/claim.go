@@ -14,8 +14,12 @@ import (
 // once per interval, independent of claim TTL. Not configurable.
 const HeartbeatDebounceInterval = 5 * time.Minute
 
+func sameWorkerDismissalMsg(otherID string) string {
+	return fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", otherID)
+}
+
 func hasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
-	expectedMsg := fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", otherID)
+	expectedMsg := sameWorkerDismissalMsg(otherID)
 	for _, op := range allOps {
 		if op.Type == ops.OpNote && op.TargetID == targetID && op.Payload.Msg == expectedMsg {
 			return true
