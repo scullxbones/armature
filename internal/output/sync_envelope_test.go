@@ -45,11 +45,11 @@ func TestSyncEnvelopeJSONRoundTrip_REQ_LNGHZN_S11_T3(t *testing.T) {
 
 func TestSyncHelpNamesConcreteArmCommand_REQ_LNGHZN_S11_T3(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, []string{"arm list --status done"}, SyncHelp(nil))
-	assert.Equal(t, []string{"arm show T1"}, SyncHelp([]SyncIssue{{
+	assert.Equal(t, []string{"arm list --status done"}, syncHelp(nil))
+	assert.Equal(t, []string{"arm show T1"}, syncHelp([]SyncIssue{{
 		ID: "T1", Kind: "promote", Status: "merged",
 	}}))
-	assert.Equal(t, []string{"arm review record --issue T2 --assessment <assessment.json>"}, SyncHelp([]SyncIssue{
+	assert.Equal(t, []string{"arm review record --issue T2 --assessment <assessment.json>"}, syncHelp([]SyncIssue{
 		{ID: "T1", Kind: "legacy", NextAction: "arm delivery record --issue T1 --base <sha> --tip <sha>"},
 		{ID: "T2", Kind: "missing-assessment", NextAction: "arm review record --issue T2 --assessment <assessment.json>"},
 	}))

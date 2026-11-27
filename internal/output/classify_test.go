@@ -12,9 +12,9 @@ func TestCommandClassificationDefaultsToAgentFacing_REQ_AOC_S1_T2(t *testing.T) 
 	require.Equal(t, ChannelAgentFacing, Classify(nil), "nil annotations must default to agent-facing")
 	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{}), "empty annotations must default to agent-facing")
 	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{"other": "x"}), "unrelated annotations must default to agent-facing")
-	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{ChannelAnnotationKey: ""}), "empty channel must not opt out")
-	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{ChannelAnnotationKey: "protocol"}), "unknown channel must not opt out")
-	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{ChannelAnnotationKey: string(ChannelAgentFacing)}))
+	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{channelAnnotationKey: ""}), "empty channel must not opt out")
+	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{channelAnnotationKey: "protocol"}), "unknown channel must not opt out")
+	require.Equal(t, ChannelAgentFacing, Classify(map[string]string{channelAnnotationKey: string(ChannelAgentFacing)}))
 
 	marked := MarkProtocolOutput(nil)
 	require.Equal(t, ChannelProtocolOutput, Classify(marked), "Protocol Output requires an explicit mark")
@@ -76,7 +76,7 @@ func TestArtifactOutputModesCiteGoverningShape_REQ_AOC_S1_T3(t *testing.T) {
 		WhenAnyFlagSet: []string{"schema", "example"},
 	})
 	require.Equal(t, CitationPlanSchema, dagApply[ArtifactCitationKey])
-	require.Equal(t, "schema,example", dagApply[ArtifactWhenAnyFlagSetKey])
+	require.Equal(t, "schema,example", dagApply[artifactWhenAnyFlagSetKey])
 }
 
 func TestArtifactCommandsKeepResultModesAgentFacing_REQ_AOC_S1_T3(t *testing.T) {

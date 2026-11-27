@@ -87,7 +87,7 @@ func PlanClaim(in PlanInput) (ClaimPlan, error) {
 			if !hasSameWorkerDismissal(in.PriorOps, in.TargetID, id, in.WorkerID) {
 				notes = append(notes, NoteIntent{
 					IssueID: in.TargetID,
-					Message: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id),
+					Message: sameWorkerDismissalMsg(id),
 				})
 			}
 			continue
@@ -127,10 +127,7 @@ func competes(fact IssueFacts) bool {
 }
 
 func hasSameWorkerDismissal(prior []ops.Op, targetID, otherID, workerID string) bool {
-	if !hasOverlapDismissalNote(prior, targetID, otherID) {
-		return false
-	}
-	expected := fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", otherID)
+	expected := sameWorkerDismissalMsg(otherID)
 	for _, op := range prior {
 		if op.Type == ops.OpNote && op.TargetID == targetID && op.WorkerID == workerID && op.Payload.Msg == expected {
 			return true

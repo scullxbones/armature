@@ -10,7 +10,7 @@ const (
 	// ShowLargeFieldLimit is the default truncation cap for outcome and
 	// definition_of_done in structured arm show output.
 	ShowLargeFieldLimit = 512
-	ShowFieldHelp       = "arm show <id> --field <name> extracts a scalar value, never an envelope"
+	showFieldHelp       = "arm show <id> --field <name> extracts a scalar value, never an envelope"
 )
 
 // ShowTruncation is the truncated adjunct: large text fields stay present,
@@ -56,7 +56,7 @@ func TruncateShowIssue(row IssueJSON) (IssueJSON, []ShowTruncation) {
 
 func showHelp(ids []string, trunc []ShowTruncation) []string {
 	if len(trunc) == 0 {
-		return []string{ShowFieldHelp}
+		return []string{showFieldHelp}
 	}
 	id := "<id>"
 	if len(ids) == 1 {
@@ -65,7 +65,7 @@ func showHelp(ids []string, trunc []ShowTruncation) []string {
 	t := trunc[0]
 	line := fmt.Sprintf("%s truncated (%d of %d bytes); arm show %s --full for complete fields",
 		t.Field, t.ShownBytes, t.TotalBytes, id)
-	return []string{line, ShowFieldHelp}
+	return []string{line, showFieldHelp}
 }
 
 // WriteShowEnvelope emits the compact agent show object {count,issues,help}

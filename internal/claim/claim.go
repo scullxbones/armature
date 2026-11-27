@@ -5,8 +5,6 @@ package claim
 import (
 	"fmt"
 	"time"
-
-	"github.com/scullxbones/armature/internal/ops"
 )
 
 // HeartbeatDebounceInterval is the fixed debounce interval for rate-limited
@@ -14,14 +12,8 @@ import (
 // once per interval, independent of claim TTL. Not configurable.
 const HeartbeatDebounceInterval = 5 * time.Minute
 
-func hasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
-	expectedMsg := fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", otherID)
-	for _, op := range allOps {
-		if op.Type == ops.OpNote && op.TargetID == targetID && op.Payload.Msg == expectedMsg {
-			return true
-		}
-	}
-	return false
+func sameWorkerDismissalMsg(otherID string) string {
+	return fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", otherID)
 }
 
 func foldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity int64) int64 {

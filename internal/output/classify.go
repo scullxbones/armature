@@ -2,26 +2,26 @@ package output
 
 import "strings"
 
-// Channel is a command's Agent Output Contract classification.
+// channel is a command's Agent Output Contract classification.
 // Every command mode is agent-facing, Protocol Output, or Artifact Output;
-// the default is agent-facing.
-type Channel string
+// the default is agent-facing. Callers compare the exported constants.
+type channel string
 
 const (
-	ChannelAgentFacing    Channel = "agent-facing"
-	ChannelProtocolOutput Channel = "protocol-output"
-	ChannelArtifactOutput Channel = "artifact-output"
+	ChannelAgentFacing    channel = "agent-facing"
+	ChannelProtocolOutput channel = "protocol-output"
+	ChannelArtifactOutput channel = "artifact-output"
 )
 
-// ChannelAnnotationKey is the cobra.Command.Annotations key that stores Channel.
+// channelAnnotationKey is the cobra.Command.Annotations key that stores channel.
 // Absence, emptiness, or an unrecognized value means agent-facing (N9).
-const ChannelAnnotationKey = "armature.output.channel"
+const channelAnnotationKey = "armature.output.channel"
 
 // Artifact citation and mode-selector annotation keys (N8 / N9.4–N9.5).
 const (
 	ArtifactCitationKey          = "armature.output.artifact.citation"
-	ArtifactWhenAnyFlagSetKey    = "armature.output.artifact.when-any-flag-set"
-	ArtifactWhenAllFlagsUnsetKey = "armature.output.artifact.when-all-flags-unset"
+	artifactWhenAnyFlagSetKey    = "armature.output.artifact.when-any-flag-set"
+	artifactWhenAllFlagsUnsetKey = "armature.output.artifact.when-all-flags-unset"
 )
 
 // Governing-shape citations for the three normative Artifact Output modes (N8).
@@ -44,24 +44,24 @@ type ArtifactMode struct {
 
 // Classify returns the command's output channel from its annotations,
 // treating all flags as unset. A new command cannot opt out by omission.
-func Classify(annotations map[string]string) Channel {
+func Classify(annotations map[string]string) channel {
 	return ClassifyFlags(annotations, nil)
 }
 
 // ClassifyFlags returns the output channel for an invocation whose set flags
 // are the keys of setFlags with true values. Unlisted flags are unset.
-func ClassifyFlags(annotations map[string]string, setFlags map[string]bool) Channel {
-	if Channel(annotations[ChannelAnnotationKey]) == ChannelProtocolOutput {
+func ClassifyFlags(annotations map[string]string, setFlags map[string]bool) channel {
+	if channel(annotations[channelAnnotationKey]) == ChannelProtocolOutput {
 		return ChannelProtocolOutput
 	}
-	if Channel(annotations[ChannelAnnotationKey]) != ChannelArtifactOutput {
+	if channel(annotations[channelAnnotationKey]) != ChannelArtifactOutput {
 		return ChannelAgentFacing
 	}
 	if strings.TrimSpace(annotations[ArtifactCitationKey]) == "" {
 		return ChannelAgentFacing
 	}
-	anySet := splitCSV(annotations[ArtifactWhenAnyFlagSetKey])
-	allUnset := splitCSV(annotations[ArtifactWhenAllFlagsUnsetKey])
+	anySet := splitCSV(annotations[artifactWhenAnyFlagSetKey])
+	allUnset := splitCSV(annotations[artifactWhenAllFlagsUnsetKey])
 	if len(anySet) == 0 && len(allUnset) == 0 {
 		return ChannelArtifactOutput
 	}
@@ -83,19 +83,19 @@ func ClassifyFlags(annotations map[string]string, setFlags map[string]bool) Chan
 
 func MarkProtocolOutput(annotations map[string]string) map[string]string {
 	out := cloneAnnotations(annotations, 1)
-	out[ChannelAnnotationKey] = string(ChannelProtocolOutput)
+	out[channelAnnotationKey] = string(ChannelProtocolOutput)
 	return out
 }
 
 func MarkArtifactOutput(annotations map[string]string, mode ArtifactMode) map[string]string {
 	out := cloneAnnotations(annotations, 4)
-	out[ChannelAnnotationKey] = string(ChannelArtifactOutput)
+	out[channelAnnotationKey] = string(ChannelArtifactOutput)
 	out[ArtifactCitationKey] = mode.Citation
 	if len(mode.WhenAnyFlagSet) > 0 {
-		out[ArtifactWhenAnyFlagSetKey] = strings.Join(mode.WhenAnyFlagSet, ",")
+		out[artifactWhenAnyFlagSetKey] = strings.Join(mode.WhenAnyFlagSet, ",")
 	}
 	if len(mode.WhenAllFlagsUnset) > 0 {
-		out[ArtifactWhenAllFlagsUnsetKey] = strings.Join(mode.WhenAllFlagsUnset, ",")
+		out[artifactWhenAllFlagsUnsetKey] = strings.Join(mode.WhenAllFlagsUnset, ",")
 	}
 	return out
 }
