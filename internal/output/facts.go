@@ -14,7 +14,7 @@ type NoteFact struct {
 }
 
 // HostRefFact is one live host name for arm show. Current marks the latest
-// live name. The JSON tags are the arm show / list wire shape.
+// live name. The JSON tags are the arm show wire shape.
 type HostRefFact struct {
 	URL     string `json:"url"`
 	Role    string `json:"role,omitempty"`
