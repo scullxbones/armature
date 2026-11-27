@@ -140,51 +140,48 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-func TestHasOverlapDismissalNote_NotFound(t *testing.T) {
+func TestHasSameWorkerDismissal_NotFound(t *testing.T) {
 	t.Parallel()
-	ops := []ops.Op{
+	opsList := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
 		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
 			Payload: ops.Payload{Msg: "Some other note"}},
 	}
-	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
-	assert.False(t, found)
+	assert.False(t, hasSameWorkerDismissal(opsList, "task-02", "task-01", "worker-a"))
 }
 
-func TestHasOverlapDismissalNote_Found(t *testing.T) {
+func TestHasSameWorkerDismissal_Found(t *testing.T) {
 	t.Parallel()
-	ops := []ops.Op{
+	opsList := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
 		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
-			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+			Payload: ops.Payload{Msg: sameWorkerDismissalMsg("task-01")}},
 	}
-	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
-	assert.True(t, found)
+	assert.True(t, hasSameWorkerDismissal(opsList, "task-02", "task-01", "worker-a"))
 }
 
-func TestHasOverlapDismissalNote_FoundAmongMultiple(t *testing.T) {
+func TestHasSameWorkerDismissal_FoundAmongMultiple(t *testing.T) {
 	t.Parallel()
-	ops := []ops.Op{
+	opsList := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
 		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
 			Payload: ops.Payload{Msg: "Some other note"}},
 		{Type: ops.OpNote, TargetID: "task-03", Timestamp: 102, WorkerID: "worker-a",
-			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+			Payload: ops.Payload{Msg: sameWorkerDismissalMsg("task-01")}},
 		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 103, WorkerID: "worker-a",
-			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+			Payload: ops.Payload{Msg: sameWorkerDismissalMsg("task-01")}},
 	}
-	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
-	assert.True(t, found)
+	assert.True(t, hasSameWorkerDismissal(opsList, "task-02", "task-01", "worker-a"))
+	assert.False(t, hasSameWorkerDismissal(opsList, "task-02", "task-01", "worker-b"))
 }
 
-func TestHasOverlapDismissalNote_NotFoundDifferentTarget(t *testing.T) {
+func TestHasSameWorkerDismissal_NotFoundDifferentTarget(t *testing.T) {
 	t.Parallel()
-	ops := []ops.Op{
+	opsList := []ops.Op{
 		{Type: ops.OpNote, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-a",
-			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-02 (same worker, dismissed)"}},
+			Payload: ops.Payload{Msg: sameWorkerDismissalMsg("task-02")}},
 	}
-	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
-	assert.False(t, found)
+	assert.False(t, hasSameWorkerDismissal(opsList, "task-02", "task-01", "worker-a"))
 }
 
 func TestShouldHeartbeat_NoHeartbeatYet_REQ_LNGHZN_S3_T1(t *testing.T) {
