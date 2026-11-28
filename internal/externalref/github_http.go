@@ -23,8 +23,6 @@ func gitHubToken(lookup func(string) (string, bool)) string {
 	return token
 }
 
-// gitHubDo performs one GitHub API call and refuses redirects.
-// A status other than okStatus is drained and closed. The caller closes a successful body.
 func gitHubDo(ctx context.Context, verb, method, apiURL, token string, body io.Reader, rt http.RoundTripper, okStatus int) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, apiURL, body)
 	if err != nil {
@@ -62,5 +60,7 @@ func gitHubStatusError(resp *http.Response, verb string) error {
 }
 
 func closeGitHubBody(resp *http.Response) {
-	_ = resp.Body.Close() //nolint:errcheck // close after read or drain is not actionable
+	if err := resp.Body.Close(); err != nil {
+		return
+	}
 }
