@@ -45,18 +45,14 @@ func gitHubDo(ctx context.Context, verb, method, apiURL, token string, body io.R
 		return nil, fmt.Errorf("GitHub issue %s: %w", verb, err)
 	}
 	if resp.StatusCode != okStatus {
-		err := gitHubStatusError(resp, verb)
+		_, drainErr := io.Copy(io.Discard, io.LimitReader(resp.Body, maxGitHubIssueJSONBytes))
 		closeGitHubBody(resp)
-		return nil, err
+		if drainErr != nil {
+			return nil, fmt.Errorf("GitHub issue %s: HTTP %d: %w", verb, resp.StatusCode, drainErr)
+		}
+		return nil, fmt.Errorf("GitHub issue %s: HTTP %d", verb, resp.StatusCode)
 	}
 	return resp, nil
-}
-
-func gitHubStatusError(resp *http.Response, verb string) error {
-	if _, drainErr := io.Copy(io.Discard, io.LimitReader(resp.Body, maxGitHubIssueJSONBytes)); drainErr != nil {
-		return fmt.Errorf("GitHub issue %s: HTTP %d: %w", verb, resp.StatusCode, drainErr)
-	}
-	return fmt.Errorf("GitHub issue %s: HTTP %d", verb, resp.StatusCode)
 }
 
 func closeGitHubBody(resp *http.Response) {
