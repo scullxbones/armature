@@ -60,7 +60,7 @@ func gitHubStatusError(resp *http.Response, verb string) error {
 }
 
 func closeGitHubBody(resp *http.Response) {
-	if err := resp.Body.Close(); err != nil {
-		return
-	}
+	swallowErr(resp.Body.Close())
 }
+
+func swallowErr(err error) { _ = err }
