@@ -8,10 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
-
-const gitHubIssueCreateTimeout = 30 * time.Second
 
 // CreatedIssue is the host ticket opened for andon / dogfood signals.
 type CreatedIssue struct {
@@ -26,11 +23,7 @@ func CreateGitHubIssue(
 	labels []string,
 	lookup func(string) (string, bool),
 ) (CreatedIssue, error) {
-	token := ""
-	if lookup != nil {
-		token, _ = lookup("GITHUB_TOKEN")
-	}
-	return createGitHubIssue(ctx, owner, repo, title, body, labels, token, http.DefaultTransport)
+	return createGitHubIssue(ctx, owner, repo, title, body, labels, gitHubToken(lookup), http.DefaultTransport)
 }
 
 func createGitHubIssue(
@@ -63,33 +56,11 @@ func createGitHubIssue(
 	if err != nil {
 		return CreatedIssue{}, fmt.Errorf("GitHub issue create: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(raw))
+	resp, err := gitHubDo(ctx, "create", http.MethodPost, apiURL, token, bytes.NewReader(raw), rt, http.StatusCreated)
 	if err != nil {
-		return CreatedIssue{}, fmt.Errorf("GitHub issue create: %w", err)
+		return CreatedIssue{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{
-		Timeout:   gitHubIssueCreateTimeout,
-		Transport: rt,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return CreatedIssue{}, fmt.Errorf("GitHub issue create: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close() //nolint:errcheck // close after read or drain is not actionable
-	}()
-	if resp.StatusCode != http.StatusCreated {
-		if _, drainErr := io.Copy(io.Discard, io.LimitReader(resp.Body, maxGitHubIssueJSONBytes)); drainErr != nil {
-			return CreatedIssue{}, fmt.Errorf("GitHub issue create: HTTP %d: %w", resp.StatusCode, drainErr)
-		}
-		return CreatedIssue{}, fmt.Errorf("GitHub issue create: HTTP %d", resp.StatusCode)
-	}
+	defer closeGitHubBody(resp)
 	var decoded struct {
 		Number  int    `json:"number"`
 		HTMLURL string `json:"html_url"`

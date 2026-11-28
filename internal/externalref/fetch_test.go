@@ -37,6 +37,8 @@ func TestFetchGitHubIssueReadsTitleAndBody_REQ_HOSTREF_S1_T4(t *testing.T) {
 		assert.Equal(t, http.MethodGet, req.Method)
 		assert.Equal(t, "https://api.github.com/repos/octocat/hello-world/issues/1", req.URL.String())
 		assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+		assert.Equal(t, "application/vnd.github+json", req.Header.Get("Accept"))
+		assert.Empty(t, req.Header.Get("Content-Type"))
 		assert.Nil(t, req.Body)
 	})
 

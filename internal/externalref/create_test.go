@@ -19,6 +19,8 @@ func TestCreateGitHubIssue_REQ_482(t *testing.T) {
 			assert.Equal(t, http.MethodPost, req.Method)
 			assert.Equal(t, "https://api.github.com/repos/octocat/hello-world/issues", req.URL.String())
 			assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+			assert.Equal(t, "application/vnd.github+json", req.Header.Get("Accept"))
+			assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 			body, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
 			var payload map[string]any
